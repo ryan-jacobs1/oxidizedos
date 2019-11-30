@@ -10,8 +10,8 @@ CHECKSUM equ -(MAGIC + FLAGS)   ; checksum of above, to prove we are multiboot
 ; search for this signature in the first 8 KiB of the kernel file, aligned at a
 ; 32-bit boundary. The signature is in its own section so the header can be
 ; forced to be within the first 8 KiB of the kernel file.
-global .multiboot
 section .multiboot
+multiboot:
 align 4
 	dd MAGIC
 	dd FLAGS
@@ -37,9 +37,13 @@ stack_top:
 ; bootloader will jump to this position once the kernel has been loaded. It
 ; doesn't make sense to return from this function as the bootloader is gone.
 ; Declare _start as a function symbol with the given symbol size.
-section .text
+section .text1
 global _entry:function (_entry.end - _entry)
 _entry:
+align 4
+	dd MAGIC
+	dd FLAGS
+	dd CHECKSUM
 	; The bootloader has loaded us into 32-bit protected mode on a x86
 	; machine. Interrupts are disabled. Paging is disabled. The processor
 	; state is as defined in the multiboot standard. The kernel has full
