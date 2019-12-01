@@ -74,6 +74,7 @@ longmode:
  
 Realm64:
     cli                           ; Clear the interrupt flag.
+    mov rsp, stack_top            ; Use a virtual memory stack
     mov ax, GDT64.Data            ; Set the A-register to the data descriptor.
     mov ds, ax                    ; Set the data segment to the A-register.
     mov es, ax                    ; Set the extra segment to the A-register.
@@ -87,3 +88,9 @@ Realm64:
     extern _start
     call _start
     hlt                           ; Halt the processor.
+
+section .bss
+align 16
+stack_bottom:
+resb 16384 ; 16 KiB
+stack_top:
