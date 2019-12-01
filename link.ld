@@ -17,10 +17,16 @@ SECTIONS
 		*(.text1)
 	}
 
+	.bsbss ALIGN(4096):
+	{
+		*(.bsbss)
+	}
+
 	.text1 :
 	{
 		*(.text)
 	}
+	
 	
  
 	/* First put the multiboot header, as it is required to be put very early
