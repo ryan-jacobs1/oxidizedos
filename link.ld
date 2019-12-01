@@ -14,18 +14,10 @@ SECTIONS
 	.text ALIGN(4096):
 	{
 		*(.multiboot)
-		*(.text1)
-	}
-
-	.bsbss ALIGN(4096):
-	{
-		*(.bsbss)
-	}
-
-	.text1 :
-	{
 		*(.text)
 	}
+
+	
 	
 	
  
