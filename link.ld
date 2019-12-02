@@ -14,13 +14,11 @@ SECTIONS
 	.text ALIGN(4096):
 	{
 		*(.multiboot)
-		*(.text1)
-	}
-
-	.text1 :
-	{
 		*(.text)
 	}
+
+	
+	
 	
  
 	/* First put the multiboot header, as it is required to be put very early
