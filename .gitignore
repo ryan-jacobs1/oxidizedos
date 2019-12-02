@@ -1,2 +1,7 @@
 /target
 **/*.rs.bk
+oxos.iso
+isodir/boot/oxos.bin
+isodir/boot/grub/grub.cfg
+src/boot.o
+src/longmodeNasm.o
