@@ -1,5 +1,5 @@
 [BITS 32]
-section .text1
+section .text
 global longmode
 longmode:
     mov edi, 0x1000    ; Set the destination index to 0x1000.
