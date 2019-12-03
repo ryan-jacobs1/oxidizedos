@@ -1,3 +1,5 @@
+use std::alloc::{GlobalAlloc, Layout};
+
 pub struct Heap {
     head: *mut Block,
     size: usize,
@@ -36,7 +38,7 @@ impl Block {
                 unsafe { (*next_block_addr).find_free_mem(size, last_block_addr) }
             }
             else {
-                panic!("No free Memory, YIKES");
+                panic!("Uh Oh Sisters: Out Of Memory");
             }
         }
     }
@@ -73,26 +75,23 @@ impl Block {
             }
         }
     }
+}
 
-    fn print(&mut self, last_block_addr: *mut Block) {
-        println!( "\nBlock Address: {}", self as *mut Block as usize );
-        println!( "Allocatable Block Size: {}", self.size );
-        println!( "Entire Block Size: {}", self.size + BLOCK_SIZE );
-        println!( "Previous Block Size: {}", self.prev_block_size );
-        println!( "Block is_free: {}", self.is_free );
+unsafe impl GlobalAlloc for Heap {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        unsafe { (*self.head).find_free_mem(layout.size(), (self.head as usize + self.size) as *mut Block) as *mut u8}
+    }
 
-        let next_block_addr = (self as *mut Block as usize + BLOCK_SIZE + self.size) as *mut Block;
-        if next_block_addr != last_block_addr {
-            unsafe { (*next_block_addr).print(last_block_addr); }
-        }
-        else {
-            println!( "last_block_add: {}", last_block_addr as usize );
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe {
+            let deallocated_block = (ptr as usize - BLOCK_SIZE) as *mut Block;
+            (*deallocated_block).free((self.head as usize + self.size) as *mut Block);
         }
     }
 }
 
 impl Heap {
-    fn new(addr: *mut usize, size: usize) -> Self {
+    fn init_heap(addr: *mut usize, size: usize) {
         unsafe {
             let head = addr as *mut Block;
             *head = Block {
@@ -100,25 +99,6 @@ impl Heap {
                 size: size - BLOCK_SIZE,
                 prev_block_size: 0,
             };
-            Self { head, size }
         }
-    }
-
-    fn malloc(&mut self, size: usize) -> *mut usize {
-        unsafe { (*self.head).find_free_mem(size, (self.head as usize + self.size) as *mut Block) }
-    }
-
-    fn free(&mut self, addr: *mut usize) {
-        unsafe {
-            let deallocated_block = (addr as usize - BLOCK_SIZE) as *mut Block;
-            (*deallocated_block).free((self.head as usize + self.size) as *mut Block);
-        }
-    }
-
-    fn print(&self) {
-        println!( "\nHeap Address: {}", self.head as usize );
-        println!( "Heap Size: {}", self.size );
-        println!( "Size of Block Struct: {}",  BLOCK_SIZE);
-        unsafe { (*self.head).print((self.head as usize + self.size) as *mut Block); }
     }
 }
