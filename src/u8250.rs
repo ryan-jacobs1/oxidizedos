@@ -1,12 +1,9 @@
 use crate::machine;
 use core::fmt;
 
+pub struct U8250 {}
 
-pub struct U8250 {
-    
-}
-
-static mut WRITER: U8250 = U8250{};
+static mut WRITER: U8250 = U8250 {};
 
 impl U8250 {
     const COM_PORT: u32 = 0x3F8;
@@ -36,7 +33,6 @@ impl fmt::Write for U8250 {
     }
 }
 
-
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::u8250::_print(format_args!($($arg)*)));
@@ -55,4 +51,3 @@ pub fn _print(args: fmt::Arguments) {
         WRITER.write_fmt(args).unwrap();
     }
 }
-

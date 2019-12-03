@@ -85,5 +85,8 @@ Realm64:
     mov ecx, 500                  ; Set the C-register to 500.
     rep stosq                     ; Clear the screen.
     extern _start
+    extern multiboot_config
+    mov edi, [multiboot_config]
+    add edi, 8
     call _start
     hlt                           ; Halt the processor.
