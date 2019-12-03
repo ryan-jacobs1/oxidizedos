@@ -17,7 +17,7 @@ impl Block {
     fn find_free_mem(&mut self, size: usize, last_block_addr: *mut Block) -> *mut usize {
         if self.is_free && size <= self.size {
             unsafe {
-                if size <= (self.size - BLOCK_SIZE) - std::mem::size_of::<usize>() {
+                if size + BLOCK_SIZE + std::mem::size_of::<usize>() <= self.size {
                     let new_block_addr = ((self as *mut Block) as usize + BLOCK_SIZE + size) as *mut Block;
                     *new_block_addr = Block { 
                         is_free: true, 
@@ -38,7 +38,7 @@ impl Block {
                 unsafe { (*next_block_addr).find_free_mem(size, last_block_addr) }
             }
             else {
-                panic!("Uh Oh Sisters: Out Of Memory");
+                panic!("Uh Oh Sisters: Out Of Memory!!! :(");
             }
         }
     }
@@ -79,19 +79,17 @@ impl Block {
 
 unsafe impl GlobalAlloc for Heap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        unsafe { (*self.head).find_free_mem(layout.size(), (self.head as usize + self.size) as *mut Block) as *mut u8}
+        (*self.head).find_free_mem(layout.size(), (self.head as usize + self.size) as *mut Block) as *mut u8
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        unsafe {
-            let deallocated_block = (ptr as usize - BLOCK_SIZE) as *mut Block;
-            (*deallocated_block).free((self.head as usize + self.size) as *mut Block);
-        }
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        let deallocated_block = (ptr as usize - BLOCK_SIZE) as *mut Block;
+        (*deallocated_block).free((self.head as usize + self.size) as *mut Block);
     }
 }
 
 impl Heap {
-    fn init_heap(addr: *mut usize, size: usize) {
+    fn new(addr: *mut usize, size: usize) -> Self {
         unsafe {
             let head = addr as *mut Block;
             *head = Block {
@@ -99,6 +97,7 @@ impl Heap {
                 size: size - BLOCK_SIZE,
                 prev_block_size: 0,
             };
+            Self { head, size }
         }
     }
 }
