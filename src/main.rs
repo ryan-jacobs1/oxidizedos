@@ -22,7 +22,8 @@ pub extern "C" fn _start(mb_config: &mb_info) -> ! {
     uart.write_string(hi);
     write!(uart, "The numbers are {} and {}, {}\n", 42, 1.0 / 3.0, hi).unwrap();
     println!("ooooweee, we're using println, {} {} {}", 42, 1.0 / 3.0, hi);
-    mb_config.print();
+    mb_config.find_all();
+    config::memory_map_init();
     //println!("mb config at 0x{:x}", mb_config as *const u32);
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
