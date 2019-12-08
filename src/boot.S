@@ -23,7 +23,7 @@ CHECKSUM equ -(MAGIC + FLAGS)   ; checksum of above, to prove we are multiboot
 ; stack is properly aligned and failure to align the stack will result in
 ; undefined behavior.
 
- section .bss
+ section .init.data
  align 16
 	stack_bottom:
 	resb 16384 ; 16 KiB

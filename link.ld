@@ -1,6 +1,8 @@
 /* The bootloader will look at this image and start execution at the symbol
    designated as the entry point. */
 ENTRY(_entry)
+
+KERNEL_VMA = 0xffff800000000000;
  
 /* Tell where the various sections of the object files will be put in the final
    kernel image. */
@@ -10,11 +12,21 @@ SECTIONS
 	   loaded at by the bootloader. */
 	. = 1M;
 
+
+	.bootstrap ALIGN(4096):
+	{
+		*(.multiboot)
+		*(.bootstrap)
+	}
+
+	.init.data ALIGN(4096):
+	{
+		*(.init.data)
+	}
 	
 	.text ALIGN(4096):
 	{
-		*(.multiboot)
-		*(.text)
+		*(.text*)
 	}
 
 	
@@ -31,20 +43,20 @@ SECTIONS
 	/* Read-only data. */
 	.rodata ALIGN(4096):
 	{
-		*(.rodata)
+		*(.rodata*)
 	}
  
 	/* Read-write data (initialized) */
 	.data ALIGN(4096):
 	{
-		*(.data)
+		*(.data*)
 	}
  
 	/* Read-write data (uninitialized) and stack */
 	.bss ALIGN(4096):
 	{
-		*(COMMON)
-		*(.bss)
+		*(COMMON*)
+		*(.bss*)
 	}
  
 	/* The compiler may produce other sections, by default it will put them in
