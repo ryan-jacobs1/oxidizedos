@@ -28,6 +28,7 @@ SECTIONS
 	
 	.text ALIGN(4096): AT(ADDR(.text) - KERNEL_VMA)
 	{
+		*(.text)
 		*(.text*)
 	}
 

@@ -16,7 +16,6 @@ longmode:
     mov DWORD [edi], 0x3003      ; Set the uint32_t at the destination index to 0x3003.
     add edi, 0x1000              ; Add 0x1000 to the destination index.
     mov DWORD [edi], 0x4003      ; Set the uint32_t at the destination index to 0x4003.
-    mov DWORD [edi + 8], 0x5003
     add edi, 0x1000              ; Add 0x1000 to the destination index.
 
     mov ebx, 0x00000003          ; Set the B-register to 0x00000003.
@@ -29,15 +28,8 @@ longmode:
     add edi, 8                   ; Add eight to the destination index.
     loop .SetEntry               ; Set the next entry.
 
-    add edi, 0x1000
-    mov ebx, 0x00000003
-    mov ecx, 512
-
-.SetEntryAgain:
-    mov DWORD [edi], ebx
-    add ebx, 0x1000
-    add edi, 8
-    loop .SetEntryAgain
+    mov edi, 0x4000
+    ;mov DWORD [edi + ]
 
     mov eax, cr4                 ; Set the A-register to control register 4.
     or eax, 1 << 5               ; Set the PAE-bit, which is the 6th bit (bit 5).
