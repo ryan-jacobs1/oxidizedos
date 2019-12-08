@@ -23,8 +23,10 @@ SECTIONS
 	{
 		*(.init.data)
 	}
+
+	. += (KERNEL_VMA - .);
 	
-	.text ALIGN(4096):
+	.text ALIGN(4096): AT(ADDR(.text) - KERNEL_VMA)
 	{
 		*(.text*)
 	}
@@ -41,19 +43,19 @@ SECTIONS
 
  
 	/* Read-only data. */
-	.rodata ALIGN(4096):
+	.rodata ALIGN(4096): AT(ADDR(.rodata) - KERNEL_VMA)
 	{
 		*(.rodata*)
 	}
  
 	/* Read-write data (initialized) */
-	.data ALIGN(4096):
+	.data ALIGN(4096): AT(ADDR(.data) - KERNEL_VMA)
 	{
 		*(.data*)
 	}
  
 	/* Read-write data (uninitialized) and stack */
-	.bss ALIGN(4096):
+	.bss ALIGN(4096): AT(ADDR(.bss) - KERNEL_VMA)
 	{
 		*(COMMON*)
 		*(.bss*)
