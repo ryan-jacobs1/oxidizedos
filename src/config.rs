@@ -67,7 +67,26 @@ impl mb_info_memory {
         println!("type {} size {}, entry size {}, version {}", self.mb_type, self.size, self.entry_size, self.entry_version);
     }
     pub unsafe fn find_all(&self) {
-        
+        let mut current: &mb_info_memory_entry = &*(((self as *const mb_info_memory as usize) + 16) as *const mb_info_memory_entry);
+        let num_entries = (self.size - 16) / self.entry_size;
+        println!("Parsing {} entries in the memory map", num_entries);
+        for i in (0..num_entries) {
+            current.print();
+            current = current.getNext(self.entry_size as usize);
+        }
+    }
+}
+
+impl mb_info_memory_entry {
+    pub fn print(&self) {
+        println!("Range 0x{:x}-0x{:x} length {} mem_type {} reserved {}", self.base_addr, self.base_addr + self.length, self.length, self.mem_type, self.reserved);
+    }
+    pub fn getNext(&self, entry_size: usize) -> &mb_info_memory_entry {
+            let current: usize = (self as *const mb_info_memory_entry) as usize;
+            let next= (current + entry_size) as *const mb_info_memory_entry;
+        unsafe {
+            &*next
+        }
     }
 }
 
@@ -75,7 +94,8 @@ pub fn memory_map_init() {
     println!("initializing memory map\n");
     unsafe {
         if let Some(ref memory) = mb_memory_map {
-           memory.print(); 
+            memory.print();
+            memory.find_all();
         }
         else {
             panic!("No memory map structure!");
