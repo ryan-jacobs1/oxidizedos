@@ -7,6 +7,7 @@ mod machine;
 mod u8250;
 mod config;
 mod heap;
+mod vmm;
 
 extern crate alloc;
 
