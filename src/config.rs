@@ -1,6 +1,6 @@
 use crate::println;
 
-static mut mb_memory_map: Option<&mb_info_memory> = None;
+pub static mut mb_memory_map: Option<&mb_info_memory> = None;
 
 #[repr(C)]
 pub struct mb_info {
@@ -10,18 +10,18 @@ pub struct mb_info {
 
 #[repr(C)]
 pub struct mb_info_memory {
-    mb_type: u32,
-    size: u32,
-    entry_size: u32,
-    entry_version: u32,
+    pub mb_type: u32,
+    pub size: u32,
+    pub entry_size: u32,
+    pub entry_version: u32,
 }
 
 #[repr(C)]
 pub struct mb_info_memory_entry {
-    base_addr: u64,
-    length: u64,
-    mem_type: u32,
-    reserved: u32,
+    pub base_addr: u64,
+    pub length: u64,
+    pub mem_type: u32,
+    pub reserved: u32,
 }
 
 
@@ -72,8 +72,14 @@ impl mb_info_memory {
         println!("Parsing {} entries in the memory map", num_entries);
         for i in (0..num_entries) {
             current.print();
-            current = current.getNext(self.entry_size as usize);
+            current = current.get_next(self.entry_size as usize);
         }
+    }
+    pub unsafe fn first_entry(&self) -> &mb_info_memory_entry {
+        &*(((self as *const mb_info_memory as usize) + 16) as *const mb_info_memory_entry)
+    }
+    pub fn num_entries(&self) -> u32 {
+        (self.size - 16) / self.entry_size
     }
 }
 
@@ -81,7 +87,7 @@ impl mb_info_memory_entry {
     pub fn print(&self) {
         println!("Range 0x{:x}-0x{:x} length {} mem_type {} reserved {}", self.base_addr, self.base_addr + self.length, self.length, self.mem_type, self.reserved);
     }
-    pub fn getNext(&self, entry_size: usize) -> &mb_info_memory_entry {
+    pub fn get_next(&self, entry_size: usize) -> &mb_info_memory_entry {
             let current: usize = (self as *const mb_info_memory_entry) as usize;
             let next= (current + entry_size) as *const mb_info_memory_entry;
         unsafe {
