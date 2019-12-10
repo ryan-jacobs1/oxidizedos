@@ -2,18 +2,13 @@ extern crate spin;
 
 use spin::Mutex;
 
-use std::alloc::{GlobalAlloc, Layout};
+use alloc::alloc::{GlobalAlloc, Layout};
 
-#[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::new(0x150000, 50000);
 
-pub struct Heap {
-    head: *mut Block,
-    size: usize,
-}
+
 
 pub struct LockedHeap {
-    heap: Mutex<Heap>;
+    heap: Mutex<Heap>,
 }
 
 pub struct Block {
@@ -22,13 +17,13 @@ pub struct Block {
     prev_block_size: usize,
 }
 
-static BLOCK_SIZE: usize = std::mem::size_of::<Block>() as usize;
+static BLOCK_SIZE: usize = core::mem::size_of::<Block>() as usize;
 
 impl Block {
     fn find_free_mem(&mut self, size: usize, last_block_addr: *mut Block) -> *mut usize {
         if self.is_free && size <= self.size {
             unsafe {
-                if size + BLOCK_SIZE + std::mem::size_of::<usize>() <= self.size {
+                if size + BLOCK_SIZE + core::mem::size_of::<usize>() <= self.size {
                     let new_block_addr = ((self as *mut Block) as usize + BLOCK_SIZE + size) as *mut Block;
                     *new_block_addr = Block { 
                         is_free: true, 
@@ -90,8 +85,8 @@ impl Block {
 
 unsafe impl GlobalAlloc for LockedHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let heap = self.heap.lock();
-        heap.(*self.head).find_free_mem(layout.size(), (heap.head as usize + heap.size) as *mut Block) as *mut u8
+        let mut heap = self.heap.lock();
+        (*heap.head).find_free_mem(layout.size(), (heap.head as usize + heap.size) as *mut Block) as *mut u8
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
@@ -101,8 +96,14 @@ unsafe impl GlobalAlloc for LockedHeap {
     }
 }
 
+unsafe impl core::marker::Send for LockedHeap {}
+unsafe impl core::marker::Send for Block {}
+
 impl Heap {
-    fn new(addr: *mut usize, size: usize) -> Self {
+    pub const fn new() -> Self {
+        Self {head: 0 as *mut Block, size: 0 as usize}
+    }
+    pub fn init(&mut self, addr: *mut usize, size: usize) {
         unsafe {
             let head = addr as *mut Block;
             *head = Block {
@@ -110,13 +111,19 @@ impl Heap {
                 size: size - BLOCK_SIZE,
                 prev_block_size: 0,
             };
-            Self { head, size }
+            self.head = head;
+            self.size = size;
         }
     }
 }
 
 impl LockedHeap {
-    fn new(addr: *mut usize, size: usize) -> Self {
-        heap = spin::Mutex::new(Heap::new(addr, size));
+    pub const fn new() -> Self {
+        let heap = spin::Mutex::new(Heap::new());
+        Self {heap}
+    }
+    pub fn init(&mut self, addr: usize, size: usize) {
+        let mut heap = self.heap.lock();
+        heap.init(addr as *mut usize, size);
     }
 }
