@@ -2,7 +2,7 @@ fn main() {
     
     
     cc::Build::new()
-    .file("src/multiboot.S")
+    .file("src/init/multiboot.S")
     .flag("-c")
     .compile("multiboot.o");
     
@@ -17,7 +17,7 @@ fn main() {
     .compile("boot.o");
     
     cc::Build::new()
-    .object("src/longmodeNasm.o")
+    .object("src/longmode.o")
     .compile("bootstrap.o");
     
 }
