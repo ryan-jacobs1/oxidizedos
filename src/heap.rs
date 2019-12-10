@@ -1,8 +1,19 @@
+extern crate spin;
+
+use spin::Mutex;
+
 use std::alloc::{GlobalAlloc, Layout};
+
+#[global_allocator]
+static ALLOCATOR: LockedHeap = LockedHeap::new(0x150000, 50000);
 
 pub struct Heap {
     head: *mut Block,
     size: usize,
+}
+
+pub struct LockedHeap {
+    heap: Mutex<Heap>;
 }
 
 pub struct Block {
@@ -77,14 +88,16 @@ impl Block {
     }
 }
 
-unsafe impl GlobalAlloc for Heap {
+unsafe impl GlobalAlloc for LockedHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        (*self.head).find_free_mem(layout.size(), (self.head as usize + self.size) as *mut Block) as *mut u8
+        let heap = self.heap.lock();
+        heap.(*self.head).find_free_mem(layout.size(), (heap.head as usize + heap.size) as *mut Block) as *mut u8
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        let heap = self.heap.lock();
         let deallocated_block = (ptr as usize - BLOCK_SIZE) as *mut Block;
-        (*deallocated_block).free((self.head as usize + self.size) as *mut Block);
+        (*deallocated_block).free((heap.head as usize + heap.size) as *mut Block);
     }
 }
 
@@ -99,5 +112,11 @@ impl Heap {
             };
             Self { head, size }
         }
+    }
+}
+
+impl LockedHeap {
+    fn new(addr: *mut usize, size: usize) -> Self {
+        heap = spin::Mutex::new(Heap::new(addr, size));
     }
 }
