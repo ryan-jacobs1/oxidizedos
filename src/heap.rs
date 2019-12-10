@@ -1,5 +1,7 @@
 extern crate spin;
 
+use crate::println;
+
 use spin::Mutex;
 
 use alloc::alloc::{GlobalAlloc, Layout};

@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(alloc_error_handler)]
-
+#![feature(panic_info_message)]
 
 mod machine;
 mod u8250;
@@ -42,13 +42,19 @@ pub extern "C" fn _start(mb_config: &mb_info) -> ! {
         uart.put(byte as u8);
     }
     unsafe {
-        ALLOCATOR.init(0x150000, 0x20000);
+        ALLOCATOR.init(0x150000, 0x50000);
     }
     let heap_val = Box::new(41);
     println!("value on heap {}", heap_val);
     let mut vec = Vec::new();
+    println!("more stuff");
     for i in 0..500 {
+        println!("{}", i);
         vec.push(i);
+    }
+    println!("vec {:?}", vec);
+    for i in 0..20 {
+        vec.pop();
     }
     println!("vec {:?}", vec);
     loop {}
@@ -56,6 +62,9 @@ pub extern "C" fn _start(mb_config: &mb_info) -> ! {
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
+    if let Some(s) = _info.message() {
+        u8250::_print(*s);
+    }
     loop {}
 }
 
