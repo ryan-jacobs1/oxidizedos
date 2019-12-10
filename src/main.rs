@@ -24,7 +24,7 @@ static HELLO: &[u8] = b"Off to the races!\n";
 
 
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::new();
+static mut ALLOCATOR: LockedHeap = LockedHeap::new();
 
 pub fn main() {}
 
@@ -40,8 +40,16 @@ pub extern "C" fn _start(mb_config: &mb_info) -> ! {
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
     }
+    unsafe {
+        ALLOCATOR.init(0x150000, 0x20000);
+    }
     let heap_val = Box::new(41);
     println!("value on heap {}", heap_val);
+    let mut vec = Vec::new();
+    for i in 0..500 {
+        vec.push(i);
+    }
+    println!("vec {:?}", vec);
     loop {}
 }
 
