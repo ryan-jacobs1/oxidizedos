@@ -5,11 +5,15 @@ use spin::Mutex;
 use alloc::alloc::{GlobalAlloc, Layout};
 
 
-
+pub struct Heap {
+    head: *mut Block,
+    size: usize,
+}
 
 pub struct LockedHeap {
     heap: Mutex<Heap>,
 }
+
 
 pub struct Block {
     is_free: bool,
