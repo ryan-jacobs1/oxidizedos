@@ -6,7 +6,7 @@ use alloc::alloc::{GlobalAlloc, Layout};
 
 
 pub struct Heap {
-    head: *mut Block,
+    head: usize,
     size: usize,
 }
 
@@ -90,13 +90,14 @@ impl Block {
 unsafe impl GlobalAlloc for LockedHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let mut heap = self.heap.lock();
-        (*heap.head).find_free_mem(layout.size(), (heap.head as usize + heap.size) as *mut Block) as *mut u8
+        let mut block: &mut Block = &mut *(heap.head as *mut Block);
+        block.find_free_mem(layout.size(), (heap.head + heap.size) as *mut Block) as *mut u8
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
         let heap = self.heap.lock();
         let deallocated_block = (ptr as usize - BLOCK_SIZE) as *mut Block;
-        (*deallocated_block).free((heap.head as usize + heap.size) as *mut Block);
+        (*deallocated_block).free((heap.head as *mut Block as usize + heap.size) as *mut Block);
     }
 }
 
@@ -105,9 +106,9 @@ unsafe impl core::marker::Send for Block {}
 
 impl Heap {
     pub const fn new() -> Self {
-        Self {head: 0 as *mut Block, size: 0 as usize}
+        Self {head: 0 as usize, size: 0 as usize}
     }
-    pub fn init(&mut self, addr: *mut usize, size: usize) {
+    pub fn init(&mut self, addr: usize, size: usize) {
         unsafe {
             let head = addr as *mut Block;
             *head = Block {
@@ -115,7 +116,7 @@ impl Heap {
                 size: size - BLOCK_SIZE,
                 prev_block_size: 0,
             };
-            self.head = head;
+            self.head = head as usize;
             self.size = size;
         }
     }
@@ -128,6 +129,6 @@ impl LockedHeap {
     }
     pub fn init(&mut self, addr: usize, size: usize) {
         let mut heap = self.heap.lock();
-        heap.init(addr as *mut usize, size);
+        heap.init(addr, size);
     }
 }
