@@ -55,8 +55,39 @@ impl AddressSpace {
             _ => {panic!("Invalid paging structure level");}
         }
     }
+    pub fn create_huge_mapping(&mut self, vpn: u64, ppn: u64) {
+        self.create_huge_mapping_helper(Address{0: vpn}, ppn, 4);
+    }
+    fn create_huge_mapping_helper(&mut self, vpn: Address, ppn: u64, level: u32) {
+        let index = match level {
+            4 => vpn.pml4_index(),
+            3 => vpn.pdpt_index(),
+            2 => vpn.pd_index(),
+            _ => {panic!("Invalid paging structure level");}
+        } as usize;
+        let mut entry = &mut self.entries[index];
+        match level {
+            2 => {
+                entry.set_huge(1);
+                entry.set_present(1);
+                entry.set_physical_addr(ppn);
+            }
+            3..=4 => {
+                if (entry.present() == 0) {
+                    entry.set_present(1);
+                    entry.set_physical_addr(alloc() / PAGE_SIZE);
+                }
+                entry.get_address_space().create_mapping_helper(vpn, ppn, level - 1);
+            }
+            _ => {panic!("Invalid paging structure level");}
+        }
+    }
 }
 
+/**
+ * Represents a memory address in terms of its indices into
+ * the paging structure
+ */
 bitfield! {
     #[repr(transparent)]
     pub struct Address(u64);
@@ -67,12 +98,16 @@ bitfield! {
     pml4_index, _: 35, 27;
 }
 
+/**
+ * Represents an entry in the PML4/PDPT/PD/PT
+ */
 bitfield! {
     #[repr(transparent)]
     pub struct AddressSpaceEntry(u64);
     present, set_present: 0, 0;
     writable, set_writable: 1, 1;
     user_supervisor, set_user_supervisor: 2, 2;
+    huge, set_huge: 7, 7;
     u64;
     physical_addr, set_physical_addr: 51, 12;
 
