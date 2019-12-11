@@ -14,6 +14,7 @@ panic = "abort"
 
 [dependencies]
 spin = "0.5.2"
+bitfield = "0.13.2"
 
 [build-dependencies]
 cc = "1.0.3"

@@ -9,6 +9,8 @@ mod config;
 mod heap;
 mod vmm;
 
+#[macro_use]
+extern crate bitfield;
 extern crate alloc;
 
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -21,6 +23,8 @@ use config::mb_info;
 use heap::{Heap, LockedHeap, Block};
 
 
+
+
 static HELLO: &[u8] = b"Off to the races!\n";
 
 
@@ -30,14 +34,16 @@ static mut ALLOCATOR: LockedHeap = LockedHeap::new();
 pub fn main() {}
 
 #[no_mangle]
-pub extern "C" fn _start(mb_config: &mb_info) -> ! {
+pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let mut uart = U8250 {};
     let hi = "Hello there!\n";
     uart.write_string(hi);
     write!(uart, "The numbers are {} and {}, {}\n", 42, 1.0 / 3.0, hi).unwrap();
     println!("ooooweee, we're using println, {} {} {}", 42, 1.0 / 3.0, hi);
+    println!("Kernel End Address {:x}", end);
     mb_config.find_all();
     config::memory_map_init();
+    vmm::init();
     //println!("mb config at 0x{:x}", mb_config as *const u32);
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
@@ -47,17 +53,6 @@ pub extern "C" fn _start(mb_config: &mb_info) -> ! {
     }
     let heap_val = Box::new(41);
     println!("value on heap {}", heap_val);
-    let mut vec = Vec::new();
-    println!("more stuff");
-    for i in 0..500 {
-        println!("{}", i);
-        vec.push(i);
-    }
-    println!("vec {:?}", vec);
-    for i in 0..20 {
-        vec.pop();
-    }
-    println!("vec {:?}", vec);
     loop {}
 }
 

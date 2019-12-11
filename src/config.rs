@@ -85,7 +85,7 @@ impl mb_info_memory {
 
 impl mb_info_memory_entry {
     pub fn print(&self) {
-        println!("Range 0x{:x}-0x{:x} length {} mem_type {} reserved {}", self.base_addr, self.base_addr + self.length, self.length, self.mem_type, self.reserved);
+        println!("Range 0x{:x}-0x{:x} length {} num pages {:x} mem_type {} reserved {}", self.base_addr, self.base_addr + self.length, self.length, self.length / 0x1000, self.mem_type, self.reserved);
     }
     pub fn get_next(&self, entry_size: usize) -> &mb_info_memory_entry {
             let current: usize = (self as *const mb_info_memory_entry) as usize;

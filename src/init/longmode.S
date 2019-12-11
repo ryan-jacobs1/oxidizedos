@@ -88,5 +88,7 @@ Realm64:
     extern multiboot_config
     mov edi, [multiboot_config]
     add edi, 8
+    extern KERNEL_END
+    mov rsi, KERNEL_END
     call _start
     hlt                           ; Halt the processor.
