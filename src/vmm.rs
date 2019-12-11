@@ -48,7 +48,7 @@ impl AddressSpace {
             2..=4 => {
                 if (entry.present() == 0) {
                     entry.set_present(1);
-                    entry.set_physical_addr(alloc());
+                    entry.set_physical_addr(alloc() / PAGE_SIZE);
                 }
                 entry.get_address_space().create_mapping_helper(vpn, ppn, level - 1);
             }
