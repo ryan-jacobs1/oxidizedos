@@ -116,7 +116,7 @@ bitfield! {
 impl AddressSpaceEntry {
     pub fn get_address_space(&self) -> &mut AddressSpace {
         unsafe {
-            &mut *((self.physical_addr() + PAGE_SIZE) as *mut AddressSpace)
+            &mut *((self.physical_addr() * PAGE_SIZE) as *mut AddressSpace)
         }
     }
 }
