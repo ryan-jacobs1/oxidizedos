@@ -118,13 +118,6 @@ fn create_identity_mappings(high_page: u64) -> &'static mut AddressSpace {
     for i in 1..0x200 {
         address_space_ref.create_mapping(i, i);
     }
-    /*
-    for i in 0x200..0x400 {
-        address_space_ref.create_mapping(i, i);
-    }
-    */
-    address_space_ref.create_huge_mapping(0x200, 0x200);
-    /*
     // Huge mappings
     let boundary = high_page - (high_page % 0x200);
     for i in (0x200..boundary).step_by(0x200) {
@@ -134,7 +127,6 @@ fn create_identity_mappings(high_page: u64) -> &'static mut AddressSpace {
     for i in boundary..high_page {
         address_space_ref.create_mapping(i, i);
     }
-    */
     address_space_ref
 }
 
@@ -210,6 +202,14 @@ pub fn init() {
     println!("Switching to new address space...");
     new_address_space.activate();
     println!("Running with a new address space!");
+    // I hope our system has at least 10MB of memory
+    {
+        let mut vmm = VMM_ALLOCATOR.lock();
+        if (0x1000000 > vmm.end_phys_mem) {
+            panic!("Failed in VMM init: not enough memory");
+        }
+        vmm.start_phys_mem = 0x1000000;
+    }
 }
 
 pub fn alloc() -> u64 {

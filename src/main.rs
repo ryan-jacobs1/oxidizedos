@@ -51,7 +51,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         uart.put(byte as u8);
     }
     unsafe {
-        ALLOCATOR.init(0x300000, 0x50000);
+        ALLOCATOR.init(0x200000, 0x800000);
     }
     let heap_val = Box::new(41);
     println!("value on heap {}", heap_val);
