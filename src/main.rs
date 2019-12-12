@@ -43,10 +43,10 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     write!(uart, "The numbers are {} and {}, {}\n", 42, 1.0 / 3.0, hi).unwrap();
     println!("ooooweee, we're using println, {} {} {}", 42, 1.0 / 3.0, hi);
     println!("Kernel End Address {:x}", end);
-    mb_config.find_all();
+    config::init_pre_paging(mb_config);
     config::memory_map_init();
     vmm::init();
-    //println!("mb config at 0x{:x}", mb_config as *const u32);
+    config::init_post_paging(mb_config);
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
     }
@@ -65,6 +65,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
+    print!("Panic: ");
     if let Some(s) = _info.message() {
         u8250::_print(*s);
     }

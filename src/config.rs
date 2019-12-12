@@ -1,6 +1,12 @@
 use crate::println;
 
+use core::str::from_utf8;
+
+
 pub static mut mb_memory_map: Option<&mb_info_memory> = None;
+pub static mut rsdp: Option<&RSDP> = None;
+pub static mut rsdt: Option<&RSDT> = None;
+
 
 #[repr(C)]
 pub struct mb_info {
@@ -22,6 +28,42 @@ pub struct mb_info_memory_entry {
     pub length: u64,
     pub mem_type: u32,
     pub reserved: u32,
+}
+
+#[repr(C, packed)]
+pub struct RSDT {
+    signature: [u8; 4],
+    length: u32,
+    revision: u8,
+    checksum: u8,
+    oemid: [u8; 6],
+    oemtableid: [u8; 8],
+    oemrevision: u32,
+    creator_id: u32,
+    creator_revision: u32
+}
+
+impl RSDT {
+    pub fn print(&self) {
+        println!("RSDT: signature: {} length {} revision {} checksum {} oemid {} oemtableid {} oemrevision {} creator_id {} creator_revision {}", from_utf8(&self.signature).unwrap(), self.length, self.revision, self.checksum, from_utf8(&self.oemid).unwrap(), from_utf8(&self.oemtableid).unwrap(), self.oemrevision, self.creator_id, self.creator_revision);
+    }
+}
+
+#[repr(C, packed)]
+pub struct RSDP {
+    mb_type: u32,
+    size: u32,
+    signature: [u8; 8],
+    checksum: u8,
+    oemid: [u8; 6],
+    revision: u8,
+    rsdt_address: u32,
+}
+
+impl RSDP {
+    pub fn print(&self) {
+        println!("signature: {}, checksum {} oemid {} revision {} rsdt_address 0x{:x}", from_utf8(&self.signature).unwrap(), self.checksum, from_utf8(&self.oemid).unwrap(), self.revision, self.rsdt_address);
+    }
 }
 
 
@@ -53,6 +95,13 @@ impl mb_info {
                 6 => {
                     unsafe {
                         mb_memory_map = Some(&*(current as *const mb_info as *const mb_info_memory))
+                    }
+                }
+                14 => {
+                    unsafe {
+                        let rsdp_temp = &*(current as *const mb_info as *const RSDP);
+                        rsdp_temp.print();
+                        rsdp = Some(rsdp_temp);
                     }
                 }
                 _ => ()
@@ -107,4 +156,28 @@ pub fn memory_map_init() {
             panic!("No memory map structure!");
         }
     }
+}
+
+pub fn initialize_rsdt() {
+    println!("initialzing rsdt");
+    unsafe {
+        if let Some(ref rsdp_temp) = rsdp {
+            let rsdt_temp = &*(rsdp_temp.rsdt_address as *const RSDT);
+            rsdt_temp.print();
+            unsafe {
+                rsdt = Some(rsdt_temp);
+            }
+        }
+        else {
+            panic!("RSDT cannot be initialized");
+        }
+    }
+}
+
+pub fn init_pre_paging(mb_config: &mb_info) {
+    mb_config.find_all();
+}
+
+pub fn init_post_paging(mb_config: &mb_info) {
+    initialize_rsdt();
 }
