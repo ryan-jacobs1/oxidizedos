@@ -59,11 +59,13 @@ impl AddressSpace {
         match level {
             1 => {
                 entry.set_present(1);
+                entry.set_writable(1);
                 entry.set_physical_addr(ppn);
             }
             2..=4 => {
                 if (entry.present() == 0) {
                     entry.set_present(1);
+                    entry.set_writable(1);
                     entry.set_physical_addr(alloc() / PAGE_SIZE);
                 }
                 entry.get_address_space().create_mapping_helper(vpn, ppn, level - 1);
@@ -86,14 +88,17 @@ impl AddressSpace {
             2 => {
                 entry.set_huge(1);
                 entry.set_present(1);
+                entry.set_writable(1);
                 entry.set_physical_addr(ppn);
             }
             3..=4 => {
                 if (entry.present() == 0) {
+                    println!("creating additional page table");
                     entry.set_present(1);
+                    entry.set_writable(1);
                     entry.set_physical_addr(alloc() / PAGE_SIZE);
                 }
-                entry.get_address_space().create_mapping_helper(vpn, ppn, level - 1);
+                entry.get_address_space().create_huge_mapping_helper(vpn, ppn, level - 1);
             }
             _ => {panic!("Invalid paging structure level");}
         }
