@@ -6,6 +6,12 @@ use crate::config::mb_info_memory;
 use crate::config::mb_info_memory_entry;
 use crate::config::mb_memory_map;
 use crate::println;
+use crate::machine;
+
+
+lazy_static! {
+    pub static ref IDENTITY_MAP: Mutex<&'static mut AddressSpace> = Mutex::new(create_identity_mappings({let x = VMM_ALLOCATOR.lock().end_phys_mem; unsafe {VMM_ALLOCATOR.force_unlock();} x} / PAGE_SIZE));
+}
 
 /*
  * Not a particularly impressive allocator, but works fine in QEMU.
@@ -20,6 +26,7 @@ pub struct VMAllocator {
 }
 
 #[repr(C, align(4096))]
+#[derive(Copy, Clone)]
 pub struct AddressSpace {
     entries: [AddressSpaceEntry; 512],
 }
@@ -27,6 +34,15 @@ pub struct AddressSpace {
 impl AddressSpace {
     pub fn new() -> *mut AddressSpace {
         alloc() as *mut AddressSpace
+    }
+    pub fn new_with_identity() -> &'static mut AddressSpace {
+        let address_space = alloc() as *mut AddressSpace;
+        let address_space_ref = unsafe {&mut *(address_space)};
+        let identity = (*IDENTITY_MAP).lock();
+        for i in 0..512 {
+            address_space_ref.entries[i] = identity.entries[i];
+        }
+        address_space_ref
     }
     pub fn create_mapping(&mut self, vpn: u64, ppn: u64) {
         self.create_mapping_helper(Address{0: vpn}, ppn, 4);
@@ -82,6 +98,39 @@ impl AddressSpace {
             _ => {panic!("Invalid paging structure level");}
         }
     }
+    /// Load this address space in CR3
+    pub fn activate(&self) {
+        unsafe {
+            machine::load_cr3(self as *const AddressSpace as u64);
+        }
+    }
+}
+
+fn create_identity_mappings(high_page: u64) -> &'static mut AddressSpace {
+    let address_space = AddressSpace::new();
+    let mut address_space_ref = unsafe {&mut *address_space};
+    // The first 2MB
+    for i in 1..0x200 {
+        address_space_ref.create_mapping(i, i);
+    }
+    /*
+    for i in 0x200..0x400 {
+        address_space_ref.create_mapping(i, i);
+    }
+    */
+    address_space_ref.create_huge_mapping(0x200, 0x200);
+    /*
+    // Huge mappings
+    let boundary = high_page - (high_page % 0x200);
+    for i in (0x200..boundary).step_by(0x200) {
+        println!("mapping page {:x}", i);
+        address_space_ref.create_huge_mapping(i, i);
+    }
+    for i in boundary..high_page {
+        address_space_ref.create_mapping(i, i);
+    }
+    */
+    address_space_ref
 }
 
 /**
@@ -103,6 +152,7 @@ bitfield! {
  */
 bitfield! {
     #[repr(transparent)]
+    #[derive(Copy, Clone)]
     pub struct AddressSpaceEntry(u64);
     present, set_present: 0, 0;
     writable, set_writable: 1, 1;
@@ -129,32 +179,32 @@ static VMM_ALLOCATOR: Mutex<VMAllocator> = spin::Mutex::new(VMAllocator {
 static PAGE_SIZE: u64 = 0x1000;
 
 pub fn init() {
-    let mut vmm_allocator = VMM_ALLOCATOR.lock();
-    unsafe {
-        if let Some(ref memory_map) = mb_memory_map {
-            let mut entry = memory_map.first_entry();
-            for i in 0..memory_map.num_entries() {
-                if entry.mem_type == 1 {
-                    let highAddr = entry.base_addr + entry.length;
-                    if (vmm_allocator.end_phys_mem < highAddr) {
-                        vmm_allocator.end_phys_mem = highAddr;
+    {
+        let mut vmm_allocator = VMM_ALLOCATOR.lock();
+        unsafe {
+            if let Some(ref memory_map) = mb_memory_map {
+                let mut entry = memory_map.first_entry();
+                for i in 0..memory_map.num_entries() {
+                    if entry.mem_type == 1 {
+                        let highAddr = entry.base_addr + entry.length;
+                        if (vmm_allocator.end_phys_mem < highAddr) {
+                            vmm_allocator.end_phys_mem = highAddr;
+                        }
                     }
-                }
-                if i != memory_map.num_entries() - 1 {
-                    entry = entry.get_next(memory_map.entry_size as usize);
+                    if i != memory_map.num_entries() - 1 {
+                        entry = entry.get_next(memory_map.entry_size as usize);
+                    }
                 }
             }
         }
+        println!("end_phys_mem: {:x}", vmm_allocator.end_phys_mem);
     }
-    println!("end_phys_mem: {:x}", vmm_allocator.end_phys_mem);
-    let x = AddressSpaceEntry { 0: 1 };
-    let y = core::mem::size_of::<AddressSpaceEntry>();
-    println!("sizeof entry is {}", y);
-    println!(
-        "sizeof address space is 0x{:x}",
-        core::mem::size_of::<AddressSpace>()
-    );
-    x.present();
+    lazy_static::initialize(&IDENTITY_MAP);
+    println!("Creating new address space...");
+    let new_address_space = AddressSpace::new_with_identity();
+    println!("Switching to new address space...");
+    new_address_space.activate();
+    println!("Running with a new address space!");
 }
 
 pub fn alloc() -> u64 {
