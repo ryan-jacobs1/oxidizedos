@@ -11,6 +11,8 @@ mod vmm;
 
 #[macro_use]
 extern crate bitfield;
+#[macro_use]
+extern crate lazy_static;
 extern crate alloc;
 
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -49,10 +51,15 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         uart.put(byte as u8);
     }
     unsafe {
-        ALLOCATOR.init(0x150000, 0x50000);
+        ALLOCATOR.init(0x300000, 0x50000);
     }
     let heap_val = Box::new(41);
     println!("value on heap {}", heap_val);
+    let mut stuff = vec::Vec::new();
+    for i in 0..500 {
+        stuff.push(i);
+    }
+    println!("{:?}", stuff);
     loop {}
 }
 
