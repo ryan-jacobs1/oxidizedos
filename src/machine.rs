@@ -3,4 +3,5 @@ extern "C" {
     pub fn outw(port: u32, val: u32);
     pub fn inb(port: u32) -> u8;
     pub fn hlt();
+    pub fn load_cr3(pml4: u64);
 }

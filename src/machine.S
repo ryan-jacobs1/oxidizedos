@@ -27,3 +27,11 @@ outw:
 hlt:
 	hlt
 	ret
+
+
+.intel_syntax noprefix
+
+.global load_cr3
+load_cr3:
+	mov cr3, rdi
+	ret
