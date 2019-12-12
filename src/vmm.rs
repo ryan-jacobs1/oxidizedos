@@ -121,7 +121,6 @@ fn create_identity_mappings(high_page: u64) -> &'static mut AddressSpace {
     // Huge mappings
     let boundary = high_page - (high_page % 0x200);
     for i in (0x200..boundary).step_by(0x200) {
-        println!("mapping page {:x}", i);
         address_space_ref.create_huge_mapping(i, i);
     }
     for i in boundary..high_page {
