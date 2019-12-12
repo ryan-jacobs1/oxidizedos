@@ -16,6 +16,10 @@ panic = "abort"
 spin = "0.5.2"
 bitfield = "0.13.2"
 
+[dependencies.lazy_static]
+version = "1.4.0"
+features = ["spin_no_std"]
+
 [build-dependencies]
 cc = "1.0.3"
 nasm-rs = "0.1.5"
