@@ -35,3 +35,21 @@ hlt:
 load_cr3:
 	mov cr3, rdi
 	ret
+
+.global rdmsr
+rdmsr:
+	mov ecx, edi
+	xor eax, eax
+	rdmsr
+	shl edx, 32
+	or rax, rdx
+	ret
+
+.global wrmsr
+wrmsr:
+	mov ecx, esi  # the msr number
+	mov eax, edi  # low 32 bits
+	mov rdx, rdi  # need the high 32 bits, so we move all the bits
+	shr rdx, 32   # shift the high 32 bits into the correct position
+	wrmsr
+	ret

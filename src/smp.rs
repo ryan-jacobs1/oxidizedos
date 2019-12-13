@@ -19,15 +19,15 @@ impl SMP {
 
     pub fn new(lapic_base: u32) -> SMP {
         SMP {
-            id: AtomicPtr::new(lapic_base + 0x20 as *mut u32),
-            eoi_reg: AtomicPtr::new(lapic_base + 0xb0 as *mut u32),
-            spurious: AtomicPtr::new(lapic_base + 0xf0 as *mut u32),
-            icr_low: AtomicPtr::new(lapic_base + 0x300 as *mut u32),
-            icr_high: AtomicPtr::new(lapic_base + 0x310 as *mut u32),
-            apit_lvl_timer: AtomicPtr::new(lapic_base + 0x320 as *mut u32),
-            apit_initial_count: AtomicPtr::new(lapic_base + 0x380 as *mut u32),
-            apit_current_count: AtomicPtr::new(lapic_base + 0x390 as *mut u32),
-            apit_divide: AtomicPtr::new(lapic_base + 0x3e0 as *mut u32),
+            id: AtomicPtr::new((lapic_base + 0x20) as *mut u32),
+            eoi_reg: AtomicPtr::new((lapic_base + 0xb0) as *mut u32),
+            spurious: AtomicPtr::new((lapic_base + 0xf0) as *mut u32),
+            icr_low: AtomicPtr::new((lapic_base + 0x300) as *mut u32),
+            icr_high: AtomicPtr::new((lapic_base + 0x310) as *mut u32),
+            apit_lvl_timer: AtomicPtr::new((lapic_base + 0x320) as *mut u32),
+            apit_initial_count: AtomicPtr::new((lapic_base + 0x380) as *mut u32),
+            apit_current_count: AtomicPtr::new((lapic_base + 0x390) as *mut u32),
+            apit_divide: AtomicPtr::new((lapic_base + 0x3e0) as *mut u32),
         }
     }
 }
@@ -37,5 +37,5 @@ fn smp_init_bsp() {
 }
 
 fn smp_init_ap() {
-    
+
 }
