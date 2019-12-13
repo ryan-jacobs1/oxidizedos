@@ -1,6 +1,10 @@
 use core::sync::atomic::AtomicPtr;
+use crate::config::config;
+use crate::machine;
 
-struct SMP {
+pub static mut LAPIC: Option<SMP> = None;
+
+pub struct SMP {
     id: AtomicPtr<u32>,
     spurious: AtomicPtr<u32>,
     icr_low: AtomicPtr<u32>,
@@ -32,10 +36,24 @@ impl SMP {
     }
 }
 
-fn smp_init_bsp() {
-
+pub fn init_bsp() {
+    unsafe {
+        if let Some(ref conf) = config {
+            LAPIC = Some(SMP::new(conf.local_apic));
+        }
+    }
+    init_ap();
 }
 
-fn smp_init_ap() {
+pub fn init_ap() {
+    unsafe {
+        // Disable PIC
+        machine::outb(0x21, 0xff);
+        machine::outb(0xa1, 0xff);
+
+        // Enable LAPIC
+        let msr_val = machine::rdmsr(SMP::MSR);
+        machine::wrmsr(msr_val | (SMP::ENABLE as u64), SMP::MSR);
+    }
 
 }
