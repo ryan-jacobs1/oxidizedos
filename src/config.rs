@@ -10,8 +10,9 @@ pub static mut mb_memory_map: Option<&mb_info_memory> = None;
 pub static mut rsdp: Option<&RSDP> = None;
 pub static mut rsdt: Option<&ACPIHeader> = None;
 pub static mut madt: Option<&MADT> = None;
+pub static mut config: Option<Config> = None;
 
-struct Config {
+pub struct Config {
     local_apic: u32,
     io_apic: u32,
     num_other_procs: u32,
@@ -32,8 +33,11 @@ struct MADTEntry {
 }
 
 impl MADTEntry {
-    pub fn next_entry(&self) -> &MADTEntry {
-        unsafe {&*((self as *const MADTEntry as usize + self.record_length as usize) as *const MADTEntry)}
+    pub fn next_entry(&self) -> *const MADTEntry {
+        (self as *const MADTEntry as usize + self.record_length as usize) as *const MADTEntry
+    }
+    pub fn print(&self) {
+        println!("entry type {} record length {} ", self.entry_type, self.record_length);
     }
 }
 
@@ -105,6 +109,15 @@ pub struct MADT {
     header: ACPIHeader,
     local_apic_addr: u32,
     flags: u32
+}
+
+impl MADT {
+    pub fn first_entry(&self) -> *const MADTEntry {
+        (self as *const MADT as usize + core::mem::size_of::<MADT>()) as *const MADTEntry
+    }
+    pub fn length_of_entries(&self) -> usize {
+        self.header.length as usize - core::mem::size_of::<MADT>()
+    }
 }
 
 #[repr(C, packed)]
@@ -248,7 +261,16 @@ pub fn initialize_madt() {
 pub fn initialize_config() {
     unsafe {
         if let Some(ref madt_temp) = madt {
-
+            println!("lapic base 0x{:x}", madt_temp.local_apic_addr);
+            let mut total = 0;
+            let length = madt_temp.length_of_entries();
+            let mut entry = madt_temp.first_entry();
+            while total < length {
+                let entry_as_ref = unsafe {&*entry};
+                entry_as_ref.print();
+                entry = entry_as_ref.next_entry();
+                total += entry_as_ref.record_length as usize;
+            }
         }
     }
 }
