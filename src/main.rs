@@ -8,6 +8,7 @@ mod u8250;
 mod config;
 mod heap;
 mod vmm;
+mod smp;
 
 #[macro_use]
 extern crate bitfield;
