@@ -2,10 +2,48 @@ use crate::println;
 
 use core::str::from_utf8;
 
+// Lots of unsafe code in this file, but that's OK,
+// since all of this code is run by one core (on one thread),
+// so no race conditions here
 
 pub static mut mb_memory_map: Option<&mb_info_memory> = None;
 pub static mut rsdp: Option<&RSDP> = None;
-pub static mut rsdt: Option<&RSDT> = None;
+pub static mut rsdt: Option<&ACPIHeader> = None;
+pub static mut madt: Option<&MADT> = None;
+
+struct Config {
+    local_apic: u32,
+    io_apic: u32,
+    num_other_procs: u32,
+    total_procs: u32,
+}
+
+
+struct APICInfo {
+    processor_id: u8,
+    apic_id: u8,
+    flags: u32,
+}
+
+#[repr(C, packed)]
+struct MADTEntry {
+    entry_type: u8,
+    record_length: u8,  
+}
+
+impl MADTEntry {
+    pub fn next_entry(&self) -> &MADTEntry {
+        unsafe {&*((self as *const MADTEntry as usize + self.record_length as usize) as *const MADTEntry)}
+    }
+}
+
+#[repr(C, packed)]
+struct LAPICEntry {
+    entry_type: u8,
+    record_length: u8,
+    acpi_processor_id: u8,
+    apic_id: u32
+}
 
 
 #[repr(C)]
@@ -31,7 +69,7 @@ pub struct mb_info_memory_entry {
 }
 
 #[repr(C, packed)]
-pub struct RSDT {
+pub struct ACPIHeader {
     signature: [u8; 4],
     length: u32,
     revision: u8,
@@ -43,10 +81,30 @@ pub struct RSDT {
     creator_revision: u32
 }
 
-impl RSDT {
+
+impl ACPIHeader {
     pub fn print(&self) {
-        println!("RSDT: signature: {} length {} revision {} checksum {} oemid {} oemtableid {} oemrevision {} creator_id {} creator_revision {}", from_utf8(&self.signature).unwrap(), self.length, self.revision, self.checksum, from_utf8(&self.oemid).unwrap(), from_utf8(&self.oemtableid).unwrap(), self.oemrevision, self.creator_id, self.creator_revision);
+        println!("ACPIHeader: signature: {} length {} revision {} checksum {} oemid {} oemtableid {} oemrevision {} creator_id {} creator_revision {}", from_utf8(&self.signature).unwrap(), self.length, self.revision, self.checksum, from_utf8(&self.oemid).unwrap(), from_utf8(&self.oemtableid).unwrap(), self.oemrevision, self.creator_id, self.creator_revision);
     }
+    pub fn find_sdt(&self, signature: &[u8]) -> Result<&ACPIHeader, ()> {
+        let num_entries = (self.length as usize - core::mem::size_of::<ACPIHeader>()) / 4;
+        for i in 0..num_entries {
+            let table_ptr = (self as *const ACPIHeader as usize + core::mem::size_of::<ACPIHeader>()) + (i * 4);
+            let table = unsafe {&(*(*(table_ptr as usize as *const u32) as *const ACPIHeader))};
+            if (table.signature == signature) {
+                return Ok(table);
+            }
+            table.print();
+        }
+        Err(())
+    }
+}
+
+#[repr(C, packed)]
+pub struct MADT {
+    header: ACPIHeader,
+    local_apic_addr: u32,
+    flags: u32
 }
 
 #[repr(C, packed)]
@@ -162,7 +220,7 @@ pub fn initialize_rsdt() {
     println!("initialzing rsdt");
     unsafe {
         if let Some(ref rsdp_temp) = rsdp {
-            let rsdt_temp = &*(rsdp_temp.rsdt_address as *const RSDT);
+            let rsdt_temp = &*(rsdp_temp.rsdt_address as *const ACPIHeader);
             rsdt_temp.print();
             unsafe {
                 rsdt = Some(rsdt_temp);
@@ -174,10 +232,33 @@ pub fn initialize_rsdt() {
     }
 }
 
+pub fn initialize_madt() {
+    println!("Initializing MADT");
+    unsafe {
+        if let Some(ref rsdt_temp) = rsdt {
+            let table = rsdt_temp.find_sdt(b"APIC");
+            match table {
+                Ok(x) => unsafe {madt = Some(&*(x as *const ACPIHeader as *const MADT));},
+                Err(()) => {panic!("Failed to find MADT");},
+            }
+        }
+    }
+}
+
+pub fn initialize_config() {
+    unsafe {
+        if let Some(ref madt_temp) = madt {
+
+        }
+    }
+}
+
 pub fn init_pre_paging(mb_config: &mb_info) {
     mb_config.find_all();
 }
 
 pub fn init_post_paging(mb_config: &mb_info) {
     initialize_rsdt();
+    initialize_madt();
+    initialize_config();
 }
