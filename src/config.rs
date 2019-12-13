@@ -13,10 +13,10 @@ pub static mut madt: Option<&MADT> = None;
 pub static mut config: Option<Config> = None;
 
 pub struct Config {
-    local_apic: u32,
-    io_apic: u32,
-    num_other_procs: u32,
-    total_procs: u32,
+    pub local_apic: u32,
+    pub io_apic: u32,
+    pub num_other_procs: u32,
+    pub total_procs: u32,
 }
 
 
