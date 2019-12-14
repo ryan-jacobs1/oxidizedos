@@ -9,6 +9,7 @@ mod config;
 mod heap;
 mod vmm;
 mod smp;
+mod idt;
 
 #[macro_use]
 extern crate bitfield;
