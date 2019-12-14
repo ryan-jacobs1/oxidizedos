@@ -53,3 +53,8 @@ wrmsr:
 	shr rdx, 32   # shift the high 32 bits into the correct position
 	wrmsr
 	ret
+
+.global lidt
+lidt:
+	lidt [rdi]
+	ret
