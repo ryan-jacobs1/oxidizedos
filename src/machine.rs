@@ -6,4 +6,5 @@ extern "C" {
     pub fn load_cr3(pml4: u64);
     pub fn rdmsr(msr: u32) -> u64;
     pub fn wrmsr(val: u64, msr: u32);
+    pub fn lidt(idt: u64);
 }
