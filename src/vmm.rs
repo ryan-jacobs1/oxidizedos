@@ -133,13 +133,15 @@ fn create_identity_mappings(high_page: u64) -> &'static mut AddressSpace {
     unsafe {
         if let Some(ref memory_map) = mb_memory_map {
             let mut entry = memory_map.first_entry();
-            for i in 0..memory_map.num_entries() {
+            let num_entries = memory_map.num_entries();
+            for i in 0..num_entries {
                 if entry.mem_type == 2 {
                     for j in (entry.base_addr..(entry.base_addr + entry.length)).step_by(PAGE_SIZE as usize) {
                         address_space_ref.create_mapping(j / PAGE_SIZE, j / PAGE_SIZE);
                     }
                 }
-                if i != memory_map.num_entries() - 1 {
+                println!("finished parsing some stuff");
+                if i != num_entries - 1 {
                     entry = entry.get_next(memory_map.entry_size as usize);
                 }
             }
@@ -188,7 +190,7 @@ impl AddressSpaceEntry {
 
 static VMM_ALLOCATOR: Mutex<VMAllocator> = spin::Mutex::new(VMAllocator {
     next: 0,
-    start_phys_mem: 0x150000,
+    start_phys_mem: 0x175000,
     end_phys_mem: 0,
 });
 static PAGE_SIZE: u64 = 0x1000;
