@@ -1,3 +1,77 @@
+[BITS 16]
+section .apentry
+global ap_entry
+ap_entry:
+cli
+lgdt [trampoline_gdtDesc]
+mov eax, cr0
+or eax, 1
+mov cr0, eax
+jmp 0x08:appm
+
+
+[BITS 32]
+appm:
+    ; Immediately setup stack, gdt, and paging
+    lgdt [GDT64.Pointer]
+    extern stack_top
+    mov esp, stack_top
+    mov eax, 0x1000
+    mov cr3, eax
+
+    ; Enable long mode
+    mov eax, cr4                 
+    or eax, 1 << 5               
+    mov cr4, eax                 
+
+    mov ecx, 0xC0000080          
+    rdmsr                        
+    or eax, 1 << 8               
+    wrmsr    
+
+    mov eax, cr0                
+    or eax, 1 << 31              
+    mov cr0, eax
+    jmp GDT64.Code:APLongMode         
+
+
+trampoline_gdt:
+    
+    dq 0
+
+; __KERNEL_CS
+	dw 0xFFFF
+	dw 0
+	db 0
+	db 0b10011010
+	db 0b11001111
+	db 0
+
+	; __KNLUSR_DS
+	dw 0xFFFF
+	dw 0
+	db 0
+	db 0b10010010
+	db 0b11001111
+	db 0
+trampoline_gdtDesc:
+	dw (trampoline_gdtDesc - trampoline_gdt) - 1
+	dq trampoline_gdt
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 [BITS 32]
 section .text
 global longmode
@@ -97,3 +171,8 @@ Realm64:
     extern _start
     call _start
     hlt                           ; Halt the processor.
+
+APLongMode:
+    extern _ap_start
+    call _ap_start
+    hlt

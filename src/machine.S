@@ -1,3 +1,5 @@
+
+	
 	# outb(int port, int val)
 	.global outb
 outb:

@@ -9,4 +9,5 @@ extern "C" {
     pub fn lidt(idt: u64);
     pub fn spurious_handler();
     pub fn software_int();
+    pub fn ap_entry();
 }

@@ -27,6 +27,7 @@ CHECKSUM equ -(MAGIC + FLAGS)   ; checksum of above, to prove we are multiboot
  align 16
 	stack_bottom:
 	resb 16384 ; 16 KiB
+	global stack_top
 	stack_top:
 	global multiboot_config
 	multiboot_config:
