@@ -8,9 +8,11 @@ SECTIONS
 {
 	/* Begin putting sections at 1 MiB, a conventional place for kernels to be
 	   loaded at by the bootloader. */
-	. = 1M;
-
 	
+	
+	
+	. = 0x100000;
+
 	.text ALIGN(4096):
 	{
 		*(.multiboot)
@@ -24,7 +26,6 @@ SECTIONS
 	/* First put the multiboot header, as it is required to be put very early
 	   early in the image or the bootloader won't recognize the file format.
 	   Next we'll put the .text section. */
-
 
 
  
@@ -50,4 +51,10 @@ SECTIONS
 	/* The compiler may produce other sections, by default it will put them in
 	   a segment with the same name. Simply add stuff here as needed. */
 	KERNEL_END = .;
+
+	. = 0x7000;
+	.apentry :
+	{
+		*(.apentry)
+	}
 }

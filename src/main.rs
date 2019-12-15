@@ -52,6 +52,12 @@ impl Stack {
 pub fn main() {}
 
 #[no_mangle]
+pub extern "C" fn _ap_start() -> ! {
+    println!("AP reached _ap_start");
+    loop {}
+}
+
+#[no_mangle]
 pub extern "C" fn pick_stack() -> usize {
     unsafe {(&STACK as *const Stack as usize) + (4096 - 8)}
 }
@@ -72,6 +78,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
     println!("smp::me(): {}", smp::me());
+    let resetEIP = machine::ap_entry as *const () as u32;
+    println!("reset eip 0x{:x}", resetEIP);
+    println!("Booting up other cores...");
+    for i in 1..4 {
+        smp::ipi(i, 0x4500);
+        smp::ipi(i, (0x4600 | (resetEIP >> 12)));
+    }
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
     }
