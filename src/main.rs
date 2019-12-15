@@ -70,7 +70,8 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     vmm::init();
     idt::init();
     idt::interrupt(0xff, machine::spurious_handler);
-    //smp::init_bsp();
+    smp::init_bsp();
+    println!("smp::me(): {}", smp::me());
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
     }
