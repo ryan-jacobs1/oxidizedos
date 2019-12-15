@@ -38,9 +38,7 @@ impl SMP {
 
 pub fn init_bsp() {
     unsafe {
-        if let Some(ref conf) = config {
-            LAPIC = Some(SMP::new(conf.local_apic));
-        }
+        LAPIC = Some(SMP::new(config.local_apic));
     }
     init_ap();
 }

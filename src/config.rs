@@ -10,13 +10,20 @@ pub static mut mb_memory_map: Option<&mb_info_memory> = None;
 pub static mut rsdp: Option<&RSDP> = None;
 pub static mut rsdt: Option<&ACPIHeader> = None;
 pub static mut madt: Option<&MADT> = None;
-pub static mut config: Option<Config> = None;
+pub static mut config: Config = Config::new();
 
 pub struct Config {
     pub local_apic: u32,
     pub io_apic: u32,
     pub num_other_procs: u32,
     pub total_procs: u32,
+    pub high_phys_mem: u64
+}
+
+impl Config {
+    pub const fn new() -> Config {
+        Config{local_apic: 0, io_apic: 0, num_other_procs: 0, total_procs: 0, high_phys_mem: 0}
+    }
 }
 
 
@@ -219,9 +226,24 @@ impl mb_info_memory_entry {
 pub fn memory_map_init() {
     println!("initializing memory map\n");
     unsafe {
-        if let Some(ref memory) = mb_memory_map {
-            memory.print();
-            memory.find_all();
+        if let Some(ref memory_map) = mb_memory_map {
+            memory_map.print();
+            memory_map.find_all();
+            let mut entry = memory_map.first_entry();
+            let mut end_phys_mem = 0;
+            for i in 0..memory_map.num_entries() {
+                if entry.mem_type == 1 {
+                    let highAddr = entry.base_addr + entry.length;
+                    if (end_phys_mem < highAddr) {
+                        end_phys_mem = highAddr;
+                    }
+                }
+                if i != memory_map.num_entries() - 1 {
+                    entry = entry.get_next(memory_map.entry_size as usize);
+                }
+            }
+            config.high_phys_mem = end_phys_mem;
+            println!("found high mem addr {:x}", end_phys_mem);
         }
         else {
             panic!("No memory map structure!");
@@ -275,12 +297,11 @@ pub fn initialize_config() {
     }
 }
 
-pub fn init_pre_paging(mb_config: &mb_info) {
+pub fn init(mb_config: &mb_info) {
     mb_config.find_all();
-}
-
-pub fn init_post_paging(mb_config: &mb_info) {
+    memory_map_init();
     initialize_rsdt();
     initialize_madt();
     initialize_config();
 }
+

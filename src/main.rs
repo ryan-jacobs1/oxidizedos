@@ -65,10 +65,9 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     write!(uart, "The numbers are {} and {}, {}\n", 42, 1.0 / 3.0, hi).unwrap();
     println!("ooooweee, we're using println, {} {} {}", 42, 1.0 / 3.0, hi);
     println!("Kernel End Address {:x}", end);
-    config::init_pre_paging(mb_config);
+    config::init(mb_config);
     config::memory_map_init();
     vmm::init();
-    config::init_post_paging(mb_config);
     //smp::init_bsp();
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
@@ -78,13 +77,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     }
     let heap_val = Box::new(41);
     println!("value on heap {}", heap_val);
-    /*
+    
     let mut stuff = vec::Vec::new();
-    for i in 0..500 {
+    for i in 0..499 {
         stuff.push(i);
     }
     println!("{:?}", stuff);
-    */
+    
     loop {}
 }
 
