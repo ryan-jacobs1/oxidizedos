@@ -1,9 +1,12 @@
+extern crate spin;
+
 use crate::machine;
 use core::fmt;
+use spin::Mutex;
 
 pub struct U8250 {}
 
-static mut WRITER: U8250 = U8250 {};
+static mut WRITER: Mutex<U8250> = Mutex::new(U8250{});
 
 impl U8250 {
     const COM_PORT: u32 = 0x3F8;
@@ -48,6 +51,6 @@ macro_rules! println {
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
     unsafe {
-        WRITER.write_fmt(args).unwrap();
+        WRITER.lock().write_fmt(args).unwrap();
     }
 }
