@@ -185,6 +185,9 @@ pub fn init() {
     {
         let mut vmm_allocator = VMM_ALLOCATOR.lock();
         vmm_allocator.end_phys_mem = unsafe {config.high_phys_mem};
+        if (vmm_allocator.end_phys_mem < vmm_allocator.start_phys_mem) {
+            panic!("Failed in VMM init: not enough physical memory on the system");
+        }
         println!("end_phys_mem: {:x}", vmm_allocator.end_phys_mem);
     }
     lazy_static::initialize(&IDENTITY_MAP);
@@ -193,14 +196,6 @@ pub fn init() {
     println!("Switching to new address space...");
     new_address_space.activate();
     println!("Running with a new address space!");
-    // I hope our system has at least 10MB of memory
-    {
-        let mut vmm = VMM_ALLOCATOR.lock();
-        if (0x1000000 > vmm.end_phys_mem) {
-            panic!("Failed in VMM init: not enough memory");
-        }
-        vmm.start_phys_mem = 0x1000000;
-    }
 }
 
 pub fn alloc() -> u64 {
