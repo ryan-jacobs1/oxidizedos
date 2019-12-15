@@ -284,6 +284,7 @@ pub fn initialize_config() {
     unsafe {
         if let Some(ref madt_temp) = madt {
             println!("lapic base 0x{:x}", madt_temp.local_apic_addr);
+            config.local_apic = madt_temp.local_apic_addr;
             let mut total = 0;
             let length = madt_temp.length_of_entries();
             let mut entry = madt_temp.first_entry();

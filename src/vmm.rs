@@ -131,6 +131,7 @@ fn create_identity_mappings(high_page: u64) -> &'static mut AddressSpace {
     // Map MMIO
     unsafe {
         let lapic: u64 = (config.local_apic as u64) / PAGE_SIZE;
+        println!("mapping {:x}", lapic);
         address_space_ref.create_mapping(lapic, lapic);
     }
     address_space_ref

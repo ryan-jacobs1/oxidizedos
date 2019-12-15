@@ -1,6 +1,8 @@
 use core::sync::atomic::AtomicPtr;
+use core::sync::atomic::Ordering;
 use crate::config::config;
 use crate::machine;
+use crate::println;
 
 pub static mut LAPIC: Option<SMP> = None;
 
@@ -52,6 +54,31 @@ pub fn init_ap() {
         // Enable LAPIC
         let msr_val = machine::rdmsr(SMP::MSR);
         machine::wrmsr(msr_val | (SMP::ENABLE as u64), SMP::MSR);
+        if let Some(ref lapic) = LAPIC {
+            let x = &mut 0x1ff;
+            lapic.spurious.store(x, Ordering::SeqCst);
+            let y = lapic.spurious.load(Ordering::SeqCst);
+            unsafe {
+                println!("spurious reg 0x{:x}", *y);
+            }
+        }
     }
+}
 
+pub fn me() -> u32 {
+    unsafe {
+        if let Some(ref lapic) = LAPIC {
+            let result = lapic.id.load(Ordering::SeqCst);
+            (*(result) >> 24)
+            /*
+            println!("attempting to read id");
+            let id_reg = (0xfee00000 as u32 + 0x20) as *const u32;
+            let result = unsafe {core::ptr::read_volatile(id_reg)};
+            return result;
+            */
+        }
+        else {
+            panic!("smp::me() failed");
+        }
+    }
 }
