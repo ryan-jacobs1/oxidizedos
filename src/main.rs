@@ -34,17 +34,31 @@ static HELLO: &[u8] = b"Off to the races!\n";
 
 #[global_allocator]
 static mut ALLOCATOR: LockedHeap = LockedHeap::new();
-static mut STACK: [u8; 4096] = [0; 4096];
+
+
+static mut STACK: Stack = Stack::new();
+
+#[repr(align(4096))]
+struct Stack {
+    stack: [u8; 4096],
+}
+
+impl Stack {
+    pub const fn new() -> Stack {
+        Stack {stack: [0; 4096]}
+    }
+}
 
 pub fn main() {}
 
 #[no_mangle]
 pub extern "C" fn pick_stack() -> usize {
-    unsafe {&STACK as *const u8 as usize}
+    unsafe {(&STACK as *const Stack as usize) + (4096 - 8)}
 }
 
 #[no_mangle]
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
+    println!("the kernel stack is at {:x}", unsafe {&STACK as *const Stack as usize});
     let mut uart = U8250 {};
     let hi = "Hello there!\n";
     uart.write_string(hi);
