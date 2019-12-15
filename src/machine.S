@@ -58,3 +58,14 @@ wrmsr:
 lidt:
 	lidt [rdi]
 	ret
+
+.global spurious_handler
+spurious_handler:
+	.extern interrupt_test
+	call interrupt_test
+	iretq
+
+.global software_int
+software_int:
+	int 0xff
+	ret

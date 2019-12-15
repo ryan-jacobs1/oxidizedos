@@ -7,4 +7,6 @@ extern "C" {
     pub fn rdmsr(msr: u32) -> u64;
     pub fn wrmsr(val: u64, msr: u32);
     pub fn lidt(idt: u64);
+    pub fn spurious_handler();
+    pub fn software_int();
 }
