@@ -184,7 +184,7 @@ impl mb_info {
 
 impl mb_info_memory {
     pub fn print(&self) {
-        println!("type {} size {}, entry size {}, version {}", self.mb_type, self.size, self.entry_size, self.entry_version);
+        println!("location {:x} type {} size {}, entry size {}, version {}", self as *const mb_info_memory as usize, self.mb_type, self.size, self.entry_size, self.entry_version);
     }
     pub unsafe fn find_all(&self) {
         let mut current: &mb_info_memory_entry = &*(((self as *const mb_info_memory as usize) + 16) as *const mb_info_memory_entry);

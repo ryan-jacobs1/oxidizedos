@@ -34,8 +34,14 @@ static HELLO: &[u8] = b"Off to the races!\n";
 
 #[global_allocator]
 static mut ALLOCATOR: LockedHeap = LockedHeap::new();
+static mut STACK: [u8; 4096] = [0; 4096];
 
 pub fn main() {}
+
+#[no_mangle]
+pub extern "C" fn pick_stack() -> usize {
+    unsafe {&STACK as *const u8 as usize}
+}
 
 #[no_mangle]
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
@@ -58,11 +64,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     }
     let heap_val = Box::new(41);
     println!("value on heap {}", heap_val);
+    /*
     let mut stuff = vec::Vec::new();
     for i in 0..500 {
         stuff.push(i);
     }
     println!("{:?}", stuff);
+    */
     loop {}
 }
 

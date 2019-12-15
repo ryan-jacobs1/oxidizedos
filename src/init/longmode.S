@@ -84,11 +84,15 @@ Realm64:
     mov rax, 0x1F201F201F201F20   ; Set the A-register to 0x1F201F201F201F20.
     mov ecx, 500                  ; Set the C-register to 500.
     rep stosq                     ; Clear the screen.
-    extern _start
     extern multiboot_config
     mov edi, [multiboot_config]
     add edi, 8
+    ; Switch to a new stack
+    extern pick_stack
+    call pick_stack
+    mov rsp, rax
     extern KERNEL_END
     mov rsi, KERNEL_END
+    extern _start
     call _start
     hlt                           ; Halt the processor.
