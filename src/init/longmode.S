@@ -68,6 +68,8 @@ longmode:
     dw $ - GDT64 - 1             ; Limit.
     dq GDT64                     ; Base.
 
+    
+
 ; Use 64-bit.
 [BITS 64]
  

@@ -1,7 +1,13 @@
 use crate::machine;
+use crate::println;
 
 pub static mut IDT: IDT = IDT::new();
 pub static mut IDTRecord: IDTRecord = IDTRecord {limit: 0, idt_addr: 0};
+
+#[no_mangle]
+pub extern "C" fn interrupt_test() {
+    println!("got interrupted!");
+}
 
 
 #[repr(C, align(4096))]
@@ -30,6 +36,29 @@ pub fn init() {
         IDTRecord.idt_addr = idt_addr;
         machine::lidt(idt_record_ptr);
     }
+}
+
+pub fn interrupt(index: usize, handler: unsafe extern "C" fn()) {
+    let mut idt_entry = IDTEntryWrapper::new();
+    let ptr = handler as *const () as u64;
+    let handler_canonical = InterruptHandlerCanonicalForm{0: ptr};
+    idt_entry.entry.set_offset_low_bits(handler_canonical.low_bits());
+    idt_entry.entry.set_selector(8);
+    idt_entry.entry.set_type_and_attributes(0x8E);
+    idt_entry.entry.set_offset_middle_bits(handler_canonical.middle_bits());
+    idt_entry.entry.set_offset_high_bits(handler_canonical.high_bits());
+    unsafe {
+        IDT.entries[index] = idt_entry;
+    }
+}
+
+bitfield! {
+    #[repr(transparent)]
+    struct InterruptHandlerCanonicalForm(u64);
+    u64;
+    low_bits, set_low_bits: 15, 0;
+    middle_bits, set_middle_bits: 31, 16;
+    high_bits, set_high_bits: 63, 32;   
 }
 
 #[derive(Clone, Copy)]
