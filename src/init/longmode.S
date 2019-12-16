@@ -174,5 +174,8 @@ Realm64:
 
 APLongMode:
     extern _ap_start
+    extern ap_pick_stack
+    call ap_pick_stack
+    mov rsp, rax
     call _ap_start
     hlt

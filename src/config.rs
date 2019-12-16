@@ -291,9 +291,14 @@ pub fn initialize_config() {
             while total < length {
                 let entry_as_ref = unsafe {&*entry};
                 entry_as_ref.print();
+                match entry_as_ref.entry_type {
+                    0 => {config.total_procs += 1;},
+                    _ => (),
+                }
                 entry = entry_as_ref.next_entry();
                 total += entry_as_ref.record_length as usize;
             }
+            println!("Found {} processors", config.total_procs);
         }
     }
 }
