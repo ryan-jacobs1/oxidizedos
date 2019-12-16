@@ -21,9 +21,11 @@ use alloc::{boxed::Box, vec, vec::Vec};
 
 use core::fmt::Write;
 use core::panic::PanicInfo;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use u8250::U8250;
 use config::mb_info;
+use config::config;
 use heap::{Heap, LockedHeap, Block};
 
 
@@ -37,8 +39,10 @@ static mut ALLOCATOR: LockedHeap = LockedHeap::new();
 
 
 static mut STACK: Stack = Stack::new();
+static APSTACK: AtomicUsize = AtomicUsize::new(0);
 
 #[repr(align(4096))]
+#[derive(Copy, Clone)]
 struct Stack {
     stack: [u8; 4096],
 }
@@ -48,6 +52,7 @@ impl Stack {
         Stack {stack: [0; 4096]}
     }
 }
+
 
 pub fn main() {}
 
@@ -60,6 +65,12 @@ pub extern "C" fn _ap_start() -> ! {
 #[no_mangle]
 pub extern "C" fn pick_stack() -> usize {
     unsafe {(&STACK as *const Stack as usize) + (4096 - 8)}
+}
+
+#[no_mangle]
+pub extern "C" fn ap_pick_stack() -> usize {
+    let stack = APSTACK.load(Ordering::SeqCst);
+    stack
 }
 
 #[no_mangle]
@@ -81,7 +92,11 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let resetEIP = machine::ap_entry as *const () as u32;
     println!("reset eip 0x{:x}", resetEIP);
     println!("Booting up other cores...");
-    for i in 1..4 {
+    let num_cores = unsafe {config.total_procs};
+    for i in 1..num_cores {
+        // First allocate a kernel stack
+        // TODO: Put info about bootstrap stacks in a Bootstrap TCB
+        APSTACK.store(vmm::alloc() as usize, Ordering::SeqCst);
         smp::ipi(i, 0x4500);
         smp::ipi(i, (0x4600 | (resetEIP >> 12)));
     }
@@ -93,13 +108,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     }
     let heap_val = Box::new(41);
     println!("value on heap {}", heap_val);
-    
+    /*
     let mut stuff = vec::Vec::new();
     for i in 0..499 {
         stuff.push(i);
     }
     println!("{:?}", stuff);
-    
+    */
     loop {}
 }
 
