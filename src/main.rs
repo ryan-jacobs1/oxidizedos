@@ -10,6 +10,7 @@ mod heap;
 mod vmm;
 mod smp;
 mod idt;
+mod thread;
 
 #[macro_use]
 extern crate bitfield;
@@ -46,15 +47,15 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 static mut STACK: Stack = Stack::new();
 static APSTACK: AtomicUsize = AtomicUsize::new(0);
 
-#[repr(align(4096))]
+#[repr(C, align(4096))]
 #[derive(Copy, Clone)]
-struct Stack {
-    stack: [u8; 4096],
+pub struct Stack {
+    pub stack: [u64; 512],
 }
 
 impl Stack {
     pub const fn new() -> Stack {
-        Stack {stack: [0; 4096]}
+        Stack {stack: [0; 512]}
     }
 }
 

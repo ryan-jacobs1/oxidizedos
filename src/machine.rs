@@ -1,3 +1,5 @@
+use crate::thread::TCBInfo;
+
 extern "C" {
     pub fn outb(port: u32, val: u32);
     pub fn outw(port: u32, val: u32);
@@ -10,4 +12,5 @@ extern "C" {
     pub fn spurious_handler();
     pub fn software_int();
     pub fn ap_entry();
+    pub fn context_switch(current: *mut TCBInfo, next: *mut TCBInfo);
 }
