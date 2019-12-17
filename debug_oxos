@@ -1,0 +1,1 @@
+qemu-system-x86_64 -s -S -smp 2 -cdrom oxos.iso -nographic --monitor none
