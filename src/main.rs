@@ -65,6 +65,7 @@ pub fn main() {}
 #[no_mangle]
 pub extern "C" fn _ap_start() -> ! {
     println!("AP reached _ap_start");
+    thread::r#yield();
     loop {}
 }
 

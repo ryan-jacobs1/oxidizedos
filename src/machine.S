@@ -47,7 +47,8 @@ context_switch:
 	push rax
 	pushf
 
-	mov rsp, rsi
+	mov [rdi], rsp
+	mov rsp, [rsi]
 	cli
 	popf
 	pop rax
