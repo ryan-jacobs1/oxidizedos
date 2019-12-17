@@ -16,6 +16,7 @@ extern crate bitfield;
 #[macro_use]
 extern crate lazy_static;
 extern crate alloc;
+extern crate linked_list_allocator;
 
 use alloc::{boxed::Box, vec, vec::Vec};
 
@@ -26,17 +27,21 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use u8250::U8250;
 use config::mb_info;
 use config::config;
-use heap::{Heap, LockedHeap, Block};
+use heap::{Heap, Block};
+use linked_list_allocator::LockedHeap;
 
 
 
 
 static HELLO: &[u8] = b"Off to the races!\n";
 
-
+/*
 #[global_allocator]
 static mut ALLOCATOR: LockedHeap = LockedHeap::new();
+*/
 
+#[global_allocator]
+static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 static mut STACK: Stack = Stack::new();
 static APSTACK: AtomicUsize = AtomicUsize::new(0);
@@ -104,10 +109,16 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         uart.put(byte as u8);
     }
     unsafe {
-        ALLOCATOR.init(0x200000, 0x800000);
+        //ALLOCATOR.init(0x200000, 0x800000);
+        ALLOCATOR.lock().init(0x200000, 0x800000);
     }
-    let heap_val = Box::new(41);
+    let heap_val = Box::<u8>::new(41);
     println!("value on heap {}", heap_val);
+    let ptr = Box::into_raw(heap_val);
+    println!("location on heap {:x}", ptr as usize);
+    let aligned_heap_val = Box::<u64>::new(17);
+    let aligned_ptr = Box::into_raw(aligned_heap_val);
+    println!("aligned? val at {:x}", aligned_ptr as usize);
     /*
     let mut stuff = vec::Vec::new();
     for i in 0..499 {
