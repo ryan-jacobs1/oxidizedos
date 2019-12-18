@@ -3,11 +3,25 @@ use crate::Stack;
 use crate::println;
 use crate::machine;
 
+use alloc::collections::VecDeque;
+use spin::Mutex;
+
+lazy_static! {
+    pub static ref READY: Mutex<VecDeque<Box<TCB>>> = spin::Mutex::new(VecDeque::new());
+}
+
+
+pub trait TCB: core::marker::Send {
+    fn get_info(&mut self) -> *mut TCBInfo;
+}
+
+
+
 #[repr(C)]
-struct TCB<T> where T: Fn() {
+struct TCBImpl<T: Fn() + core::marker::Send> {
     tcb_info: TCBInfo,
     stack: Box<Stack>,
-    work: T,
+    work: Box<T>,
 }
 
 #[repr(C)]
@@ -22,14 +36,14 @@ impl TCBInfo {
     }
 }
 
-impl<T: Fn()> TCB<T> {
+impl<T: Fn() + core::marker::Send> TCBImpl<T> {
     const num_callee_saved: usize = 6;
 
-    pub fn new(work: T) -> TCB<T> {
+    pub fn new(work: T) -> TCBImpl<T> {
         let mut stack = Box::new(Stack::new());
         let end_of_stack = 511;
         stack.stack[end_of_stack] = thread_entry_point as *const () as u64;
-        let index: usize = end_of_stack - TCB::<T>::num_callee_saved - 1;
+        let index: usize = end_of_stack - TCBImpl::<T>::num_callee_saved - 1;
         stack.stack[index] = 0; // Flags
         stack.stack[index - 1] = 0; // CR2
         let stack_ptr = Box::into_raw(stack);
@@ -39,13 +53,17 @@ impl<T: Fn()> TCB<T> {
         println!("initial rsp 0x{:x}", x);
         let tcb_info = TCBInfo::new(x);
         stack = unsafe {Box::from_raw(stack_ptr)};
-        TCB {tcb_info: tcb_info, stack: stack, work: work}
+        TCBImpl {tcb_info: tcb_info, stack: stack, work: Box::new(work)}
     }
 
-    pub fn get_info(&mut self) -> *mut TCBInfo {
+    
+}
+
+impl<T: Fn() + core::marker::Send> TCB for TCBImpl<T> {
+    fn get_info(&mut self) -> *mut TCBInfo {
         &mut self.tcb_info as *mut TCBInfo
     }
-}
+} 
 
 #[no_mangle]
 pub extern "C" fn thread_entry_point() -> ! {
@@ -55,9 +73,10 @@ pub extern "C" fn thread_entry_point() -> ! {
     loop {}
 }
 
-pub fn r#yield() {
-    let mut test1 = Box::new(TCB::new(|| ()));
-    let mut test2 = Box::new(TCB::new(|| ()));
+/// Yield is a reserved word in Rust, so we use a synonym
+pub fn surrender() {
+    let mut test1 = Box::new(TCBImpl::new(|| ()));
+    let mut test2 = Box::new(TCBImpl::new(|| ()));
     println!("attempting to context switch");
     let x = test2.get_info();
     unsafe {
