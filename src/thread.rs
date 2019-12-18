@@ -3,16 +3,47 @@ use crate::Stack;
 use crate::println;
 use crate::machine;
 
+use core::mem::MaybeUninit;
 use alloc::collections::VecDeque;
 use spin::Mutex;
 
 lazy_static! {
     pub static ref READY: Mutex<VecDeque<Box<TCB>>> = spin::Mutex::new(VecDeque::new());
+    pub static ref ACTIVE: Mutex<[Box<TCB>; 16]> = {
+        let mut active: [MaybeUninit<Box<TCB>>; 16] = unsafe {
+            MaybeUninit::uninit().assume_init()
+        };
+        for i in 0..16 {
+            active[i] = MaybeUninit::new(Box::new(BootstrapTCB::new()));
+        }
+        Mutex::new(unsafe {core::mem::transmute::<_, [Box<TCB>; 16]>(active)})
+    };
 }
+
 
 
 pub trait TCB: core::marker::Send {
     fn get_info(&mut self) -> *mut TCBInfo;
+}
+
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct BootstrapTCB {
+    tcb_info: TCBInfo,
+    stack_frame_start: Option<usize>,
+}
+
+impl BootstrapTCB {
+    pub fn new() -> BootstrapTCB {
+        BootstrapTCB {tcb_info: TCBInfo::new(0), stack_frame_start: None}
+    }
+}
+
+impl TCB for BootstrapTCB {
+    fn get_info(&mut self) -> *mut TCBInfo {
+        &mut self.tcb_info as *mut TCBInfo
+    }
 }
 
 
@@ -25,6 +56,7 @@ struct TCBImpl<T: Fn() + core::marker::Send> {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct TCBInfo {
     stack_pointer: usize,
     leave_me_alone: bool
