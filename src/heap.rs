@@ -1,6 +1,5 @@
 extern crate spin;
 
-use crate::println;
 
 use spin::Mutex;
 

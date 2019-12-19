@@ -6,26 +6,31 @@ use core::str::from_utf8;
 // since all of this code is run by one core (on one thread),
 // so no race conditions here
 
-pub static mut mb_memory_map: Option<&mb_info_memory> = None;
-pub static mut rsdp: Option<&RSDP> = None;
-pub static mut rsdt: Option<&ACPIHeader> = None;
-pub static mut madt: Option<&MADT> = None;
-pub static mut config: Config = Config::new();
+pub static mut MB_MEMORY_MAP: Option<&mb_info_memory> = None;
+pub static mut RSDP: Option<&RSDP> = None;
+pub static mut RSDT: Option<&ACPIHeader> = None;
+pub static mut MADT: Option<&MADT> = None;
+pub static mut CONFIG: Config = Config::new();
 
 pub struct Config {
     pub local_apic: u32,
     pub io_apic: u32,
     pub num_other_procs: u32,
     pub total_procs: u32,
-    pub high_phys_mem: u64
+    pub high_phys_mem: u64,
 }
 
 impl Config {
     pub const fn new() -> Config {
-        Config{local_apic: 0, io_apic: 0, num_other_procs: 0, total_procs: 0, high_phys_mem: 0}
+        Config {
+            local_apic: 0,
+            io_apic: 0,
+            num_other_procs: 0,
+            total_procs: 0,
+            high_phys_mem: 0,
+        }
     }
 }
-
 
 struct APICInfo {
     processor_id: u8,
@@ -34,9 +39,9 @@ struct APICInfo {
 }
 
 #[repr(C, packed)]
-struct MADTEntry {
+pub struct MADTEntry {
     entry_type: u8,
-    record_length: u8,  
+    record_length: u8,
 }
 
 impl MADTEntry {
@@ -44,7 +49,10 @@ impl MADTEntry {
         (self as *const MADTEntry as usize + self.record_length as usize) as *const MADTEntry
     }
     pub fn print(&self) {
-        println!("entry type {} record length {} ", self.entry_type, self.record_length);
+        println!(
+            "entry type {} record length {} ",
+            self.entry_type, self.record_length
+        );
     }
 }
 
@@ -53,9 +61,8 @@ struct LAPICEntry {
     entry_type: u8,
     record_length: u8,
     acpi_processor_id: u8,
-    apic_id: u32
+    apic_id: u32,
 }
-
 
 #[repr(C)]
 pub struct mb_info {
@@ -89,20 +96,20 @@ pub struct ACPIHeader {
     oemtableid: [u8; 8],
     oemrevision: u32,
     creator_id: u32,
-    creator_revision: u32
+    creator_revision: u32,
 }
-
 
 impl ACPIHeader {
     pub fn print(&self) {
-        println!("ACPIHeader: signature: {} length {} revision {} checksum {} oemid {} oemtableid {} oemrevision {} creator_id {} creator_revision {}", from_utf8(&self.signature).unwrap(), self.length, self.revision, self.checksum, from_utf8(&self.oemid).unwrap(), from_utf8(&self.oemtableid).unwrap(), self.oemrevision, self.creator_id, self.creator_revision);
+        unsafe {println!("ACPIHeader: signature: {} length {} revision {} checksum {} oemid {} oemtableid {} oemrevision {} creator_id {} creator_revision {}", from_utf8(&self.signature).unwrap(), self.length, self.revision, self.checksum, from_utf8(&self.oemid).unwrap(), from_utf8(&self.oemtableid).unwrap(), self.oemrevision, self.creator_id, self.creator_revision);}
     }
     pub fn find_sdt(&self, signature: &[u8]) -> Result<&ACPIHeader, ()> {
         let num_entries = (self.length as usize - core::mem::size_of::<ACPIHeader>()) / 4;
         for i in 0..num_entries {
-            let table_ptr = (self as *const ACPIHeader as usize + core::mem::size_of::<ACPIHeader>()) + (i * 4);
-            let table = unsafe {&(*(*(table_ptr as usize as *const u32) as *const ACPIHeader))};
-            if (table.signature == signature) {
+            let table_ptr =
+                (self as *const ACPIHeader as usize + core::mem::size_of::<ACPIHeader>()) + (i * 4);
+            let table = unsafe { &(*(*(table_ptr as usize as *const u32) as *const ACPIHeader)) };
+            if table.signature == signature {
                 return Ok(table);
             }
             table.print();
@@ -115,7 +122,7 @@ impl ACPIHeader {
 pub struct MADT {
     header: ACPIHeader,
     local_apic_addr: u32,
-    flags: u32
+    flags: u32,
 }
 
 impl MADT {
@@ -140,12 +147,18 @@ pub struct RSDP {
 
 impl RSDP {
     pub fn print(&self) {
-        println!("signature: {}, checksum {} oemid {} revision {} rsdt_address 0x{:x}", from_utf8(&self.signature).unwrap(), self.checksum, from_utf8(&self.oemid).unwrap(), self.revision, self.rsdt_address);
+        unsafe {
+            println!(
+                "signature: {}, checksum {} oemid {} revision {} rsdt_address 0x{:x}",
+                from_utf8(&self.signature).unwrap(),
+                self.checksum,
+                from_utf8(&self.oemid).unwrap(),
+                self.revision,
+                self.rsdt_address
+            );
+        }
     }
 }
-
-
-
 
 impl mb_info {
     fn print(&self) {
@@ -155,7 +168,7 @@ impl mb_info {
     pub fn get_next(&self) -> &mb_info {
         unsafe {
             let current: usize = (self as *const mb_info) as usize;
-            let next = self.align((current + self.size as usize)) as *const mb_info;
+            let next = self.align(current + self.size as usize) as *const mb_info;
             &*next
         }
     }
@@ -170,19 +183,15 @@ impl mb_info {
         while current.mb_type != 0 {
             current.print();
             match current.mb_type {
-                6 => {
-                    unsafe {
-                        mb_memory_map = Some(&*(current as *const mb_info as *const mb_info_memory))
-                    }
-                }
-                14 => {
-                    unsafe {
-                        let rsdp_temp = &*(current as *const mb_info as *const RSDP);
-                        rsdp_temp.print();
-                        rsdp = Some(rsdp_temp);
-                    }
-                }
-                _ => ()
+                6 => unsafe {
+                    MB_MEMORY_MAP = Some(&*(current as *const mb_info as *const mb_info_memory))
+                },
+                14 => unsafe {
+                    let rsdp_temp = &*(current as *const mb_info as *const RSDP);
+                    rsdp_temp.print();
+                    RSDP = Some(rsdp_temp);
+                },
+                _ => (),
             }
             current = current.get_next();
         }
@@ -191,13 +200,21 @@ impl mb_info {
 
 impl mb_info_memory {
     pub fn print(&self) {
-        println!("location {:x} type {} size {}, entry size {}, version {}", self as *const mb_info_memory as usize, self.mb_type, self.size, self.entry_size, self.entry_version);
+        println!(
+            "location {:x} type {} size {}, entry size {}, version {}",
+            self as *const mb_info_memory as usize,
+            self.mb_type,
+            self.size,
+            self.entry_size,
+            self.entry_version
+        );
     }
     pub unsafe fn find_all(&self) {
-        let mut current: &mb_info_memory_entry = &*(((self as *const mb_info_memory as usize) + 16) as *const mb_info_memory_entry);
+        let mut current: &mb_info_memory_entry =
+            &*(((self as *const mb_info_memory as usize) + 16) as *const mb_info_memory_entry);
         let num_entries = (self.size - 16) / self.entry_size;
         println!("Parsing {} entries in the memory map", num_entries);
-        for i in (0..num_entries) {
+        for i in 0..num_entries {
             current.print();
             current = current.get_next(self.entry_size as usize);
         }
@@ -212,40 +229,45 @@ impl mb_info_memory {
 
 impl mb_info_memory_entry {
     pub fn print(&self) {
-        println!("Range 0x{:x}-0x{:x} length {} num pages {:x} mem_type {} reserved {}", self.base_addr, self.base_addr + self.length, self.length, self.length / 0x1000, self.mem_type, self.reserved);
+        println!(
+            "Range 0x{:x}-0x{:x} length {} num pages {:x} mem_type {} reserved {}",
+            self.base_addr,
+            self.base_addr + self.length,
+            self.length,
+            self.length / 0x1000,
+            self.mem_type,
+            self.reserved
+        );
     }
     pub fn get_next(&self, entry_size: usize) -> &mb_info_memory_entry {
-            let current: usize = (self as *const mb_info_memory_entry) as usize;
-            let next= (current + entry_size) as *const mb_info_memory_entry;
-        unsafe {
-            &*next
-        }
+        let current: usize = (self as *const mb_info_memory_entry) as usize;
+        let next = (current + entry_size) as *const mb_info_memory_entry;
+        unsafe { &*next }
     }
 }
 
 pub fn memory_map_init() {
     println!("initializing memory map\n");
     unsafe {
-        if let Some(ref memory_map) = mb_memory_map {
+        if let Some(ref memory_map) = MB_MEMORY_MAP {
             memory_map.print();
             memory_map.find_all();
             let mut entry = memory_map.first_entry();
             let mut end_phys_mem = 0;
             for i in 0..memory_map.num_entries() {
                 if entry.mem_type == 1 {
-                    let highAddr = entry.base_addr + entry.length;
-                    if (end_phys_mem < highAddr) {
-                        end_phys_mem = highAddr;
+                    let high_addr = entry.base_addr + entry.length;
+                    if end_phys_mem < high_addr {
+                        end_phys_mem = high_addr;
                     }
                 }
                 if i != memory_map.num_entries() - 1 {
                     entry = entry.get_next(memory_map.entry_size as usize);
                 }
             }
-            config.high_phys_mem = end_phys_mem;
+            CONFIG.high_phys_mem = end_phys_mem;
             println!("found high mem addr {:x}", end_phys_mem);
-        }
-        else {
+        } else {
             panic!("No memory map structure!");
         }
     }
@@ -254,14 +276,13 @@ pub fn memory_map_init() {
 pub fn initialize_rsdt() {
     println!("initialzing rsdt");
     unsafe {
-        if let Some(ref rsdp_temp) = rsdp {
+        if let Some(ref rsdp_temp) = RSDP {
             let rsdt_temp = &*(rsdp_temp.rsdt_address as *const ACPIHeader);
             rsdt_temp.print();
             unsafe {
-                rsdt = Some(rsdt_temp);
+                RSDT = Some(rsdt_temp);
             }
-        }
-        else {
+        } else {
             panic!("RSDT cannot be initialized");
         }
     }
@@ -270,11 +291,15 @@ pub fn initialize_rsdt() {
 pub fn initialize_madt() {
     println!("Initializing MADT");
     unsafe {
-        if let Some(ref rsdt_temp) = rsdt {
+        if let Some(ref rsdt_temp) = RSDT {
             let table = rsdt_temp.find_sdt(b"APIC");
             match table {
-                Ok(x) => unsafe {madt = Some(&*(x as *const ACPIHeader as *const MADT));},
-                Err(()) => {panic!("Failed to find MADT");},
+                Ok(x) => unsafe {
+                    MADT = Some(&*(x as *const ACPIHeader as *const MADT));
+                },
+                Err(()) => {
+                    panic!("Failed to find MADT");
+                }
             }
         }
     }
@@ -282,23 +307,25 @@ pub fn initialize_madt() {
 
 pub fn initialize_config() {
     unsafe {
-        if let Some(ref madt_temp) = madt {
+        if let Some(ref madt_temp) = MADT {
             println!("lapic base 0x{:x}", madt_temp.local_apic_addr);
-            config.local_apic = madt_temp.local_apic_addr;
+            CONFIG.local_apic = madt_temp.local_apic_addr;
             let mut total = 0;
             let length = madt_temp.length_of_entries();
             let mut entry = madt_temp.first_entry();
             while total < length {
-                let entry_as_ref = unsafe {&*entry};
+                let entry_as_ref = unsafe { &*entry };
                 entry_as_ref.print();
                 match entry_as_ref.entry_type {
-                    0 => {config.total_procs += 1;},
+                    0 => {
+                        CONFIG.total_procs += 1;
+                    }
                     _ => (),
                 }
                 entry = entry_as_ref.next_entry();
                 total += entry_as_ref.record_length as usize;
             }
-            println!("Found {} processors", config.total_procs);
+            println!("Found {} processors", CONFIG.total_procs);
         }
     }
 }
@@ -310,4 +337,3 @@ pub fn init(mb_config: &mb_info) {
     initialize_madt();
     initialize_config();
 }
-
