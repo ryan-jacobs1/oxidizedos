@@ -45,12 +45,12 @@ context_switch:
 
 	mov rax, cr2
 	push rax
-	pushf
+	pushfq
 
 	mov [rdi], rsp
 	mov rsp, [rsi]
 	cli
-	popf
+	popfq
 	pop rax
 	mov cr2, rax
 
@@ -103,4 +103,20 @@ spurious_handler:
 .global software_int
 software_int:
 	int 0xff
+	ret
+
+.global cli
+cli:
+	cli
+	ret
+
+.global sti
+sti:
+	sti
+	ret
+
+.global get_flags
+get_flags:
+	pushfq
+	pop rax
 	ret
