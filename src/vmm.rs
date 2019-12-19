@@ -217,6 +217,7 @@ pub fn alloc() -> u64 {
         result = vmm_allocator.start_phys_mem;
         vmm_allocator.start_phys_mem += PAGE_SIZE;
     } else {
+        panic!("Ran out of fresh frames to allocate");
         // TODO: Demand paging
         if vmm_allocator.next == 0 {
             panic!("Out of physical frames.");
@@ -230,5 +231,6 @@ pub fn alloc() -> u64 {
     unsafe {
         core::ptr::write_bytes(result as *mut u8, 0, PAGE_SIZE as usize);
     }
+    println!("allocated frame 0x{:x}", result);
     result
 }

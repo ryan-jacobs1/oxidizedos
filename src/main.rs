@@ -23,7 +23,7 @@ use alloc::{boxed::Box, vec, vec::Vec};
 
 use core::fmt::Write;
 use core::panic::PanicInfo;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering, AtomicU32};
 
 use u8250::U8250;
 use config::mb_info;
@@ -46,6 +46,7 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 static mut STACK: Stack = Stack::new();
 static APSTACK: AtomicUsize = AtomicUsize::new(0);
+static CORES_ACTIVE: AtomicU32 = AtomicU32::new(0);
 
 #[repr(C, align(4096))]
 #[derive(Copy, Clone)]
@@ -64,6 +65,7 @@ pub fn main() {}
 
 #[no_mangle]
 pub extern "C" fn _ap_start() -> ! {
+    CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
     println!("AP reached _ap_start");
     thread::surrender();
     loop {}
@@ -77,11 +79,12 @@ pub extern "C" fn pick_stack() -> usize {
 #[no_mangle]
 pub extern "C" fn ap_pick_stack() -> usize {
     let stack = APSTACK.load(Ordering::SeqCst);
-    stack
+    stack + (4096 - 8)
 }
 
 #[no_mangle]
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
+    CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
     println!("the kernel stack is at {:x}", unsafe {&STACK as *const Stack as usize});
     let mut uart = U8250 {};
     let hi = "Hello there!\n";
@@ -95,6 +98,10 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     idt::init();
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
+    unsafe {
+        //ALLOCATOR.init(0x200000, 0x800000);
+        ALLOCATOR.lock().init(0x200000, 0x800000);
+    }
     println!("smp::me(): {}", smp::me());
     let reset_eip = machine::ap_entry as *const () as u32;
     println!("reset eip 0x{:x}", reset_eip);
@@ -106,14 +113,14 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         APSTACK.store(vmm::alloc() as usize, Ordering::SeqCst);
         smp::ipi(i, 0x4500);
         smp::ipi(i, 0x4600 | (reset_eip >> 12));
+        while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
+    /*
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
     }
-    unsafe {
-        //ALLOCATOR.init(0x200000, 0x800000);
-        ALLOCATOR.lock().init(0x200000, 0x800000);
-    }
+    */
+    println!("main thread doing some allocation");
     let heap_val = Box::<u8>::new(41);
     println!("value on heap {}", heap_val);
     let ptr = Box::into_raw(heap_val);
@@ -121,13 +128,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let aligned_heap_val = Box::<u64>::new(17);
     let aligned_ptr = Box::into_raw(aligned_heap_val);
     println!("aligned? val at {:x}", aligned_ptr as usize);
-    /*
+    
     let mut stuff = vec::Vec::new();
     for i in 0..499 {
         stuff.push(i);
     }
     println!("{:?}", stuff);
-    */
+    
     loop {}
 }
 
