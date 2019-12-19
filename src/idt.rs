@@ -2,7 +2,7 @@ use crate::machine;
 use crate::println;
 
 pub static mut IDT: IDT = IDT::new();
-pub static mut IDTRecord: IDTRecord = IDTRecord {limit: 0, idt_addr: 0};
+pub static mut IDTRECORD: IDTRecord = IDTRecord {limit: 0, idt_addr: 0};
 
 #[no_mangle]
 pub extern "C" fn interrupt_test() {
@@ -30,10 +30,10 @@ pub struct IDTRecord {
 pub fn init() {
     let limit: u16 = core::mem::size_of::<IDT>() as u16 - 1;
     let idt_addr: u64 = unsafe {&IDT as *const IDT as u64};
-    let idt_record_ptr: u64 = unsafe {&IDTRecord as *const IDTRecord as u64};
+    let idt_record_ptr: u64 = unsafe {&IDTRECORD as *const IDTRecord as u64};
     unsafe {
-        IDTRecord.limit = limit;
-        IDTRecord.idt_addr = idt_addr;
+        IDTRECORD.limit = limit;
+        IDTRECORD.idt_addr = idt_addr;
         machine::lidt(idt_record_ptr);
     }
 }

@@ -27,7 +27,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use u8250::U8250;
 use config::mb_info;
-use config::config;
+use config::CONFIG;
 use heap::{Heap, Block};
 use linked_list_allocator::LockedHeap;
 
@@ -96,16 +96,16 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
     println!("smp::me(): {}", smp::me());
-    let resetEIP = machine::ap_entry as *const () as u32;
-    println!("reset eip 0x{:x}", resetEIP);
+    let reset_eip = machine::ap_entry as *const () as u32;
+    println!("reset eip 0x{:x}", reset_eip);
     println!("Booting up other cores...");
-    let num_cores = unsafe {config.total_procs};
+    let num_cores = unsafe {CONFIG.total_procs};
     for i in 1..num_cores {
         // First allocate a kernel stack
         // TODO: Put info about bootstrap stacks in a Bootstrap TCB
         APSTACK.store(vmm::alloc() as usize, Ordering::SeqCst);
         smp::ipi(i, 0x4500);
-        smp::ipi(i, (0x4600 | (resetEIP >> 12)));
+        smp::ipi(i, 0x4600 | (reset_eip >> 12));
     }
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);

@@ -2,16 +2,14 @@ extern crate spin;
 
 use spin::Mutex;
 
-use crate::config::{config, Config};
-use crate::println;
+use crate::config::CONFIG;
 use crate::machine;
-
-use core::str::from_utf8;
-
-
+use crate::println;
 
 lazy_static! {
-    pub static ref IDENTITY_MAP: Mutex<&'static mut AddressSpace> = Mutex::new(create_identity_mappings(unsafe {config.high_phys_mem} / PAGE_SIZE));
+    pub static ref IDENTITY_MAP: Mutex<&'static mut AddressSpace> = Mutex::new(
+        create_identity_mappings(unsafe { CONFIG.high_phys_mem } / PAGE_SIZE)
+    );
 }
 
 /*
@@ -38,7 +36,7 @@ impl AddressSpace {
     }
     pub fn new_with_identity() -> &'static mut AddressSpace {
         let address_space = alloc() as *mut AddressSpace;
-        let address_space_ref = unsafe {&mut *(address_space)};
+        let address_space_ref = unsafe { &mut *(address_space) };
         let identity = (*IDENTITY_MAP).lock();
         for i in 0..512 {
             address_space_ref.entries[i] = identity.entries[i];
@@ -46,7 +44,7 @@ impl AddressSpace {
         address_space_ref
     }
     pub fn create_mapping(&mut self, vpn: u64, ppn: u64) {
-        self.create_mapping_helper(Address{0: vpn}, ppn, 4);
+        self.create_mapping_helper(Address { 0: vpn }, ppn, 4);
     }
     fn create_mapping_helper(&mut self, vpn: Address, ppn: u64, level: u32) {
         let index = match level {
@@ -54,7 +52,9 @@ impl AddressSpace {
             3 => vpn.pdpt_index(),
             2 => vpn.pd_index(),
             1 => vpn.pt_index(),
-            _ => {panic!("Invalid paging structure level");}
+            _ => {
+                panic!("Invalid paging structure level");
+            }
         } as usize;
         let mut entry = &mut self.entries[index];
         match level {
@@ -64,25 +64,31 @@ impl AddressSpace {
                 entry.set_physical_addr(ppn);
             }
             2..=4 => {
-                if (entry.present() == 0) {
+                if entry.present() == 0 {
                     entry.set_present(1);
                     entry.set_writable(1);
                     entry.set_physical_addr(alloc() / PAGE_SIZE);
                 }
-                entry.get_address_space().create_mapping_helper(vpn, ppn, level - 1);
+                entry
+                    .get_address_space()
+                    .create_mapping_helper(vpn, ppn, level - 1);
             }
-            _ => {panic!("Invalid paging structure level");}
+            _ => {
+                panic!("Invalid paging structure level");
+            }
         }
     }
     pub fn create_huge_mapping(&mut self, vpn: u64, ppn: u64) {
-        self.create_huge_mapping_helper(Address{0: vpn}, ppn, 4);
+        self.create_huge_mapping_helper(Address { 0: vpn }, ppn, 4);
     }
     fn create_huge_mapping_helper(&mut self, vpn: Address, ppn: u64, level: u32) {
         let index = match level {
             4 => vpn.pml4_index(),
             3 => vpn.pdpt_index(),
             2 => vpn.pd_index(),
-            _ => {panic!("Invalid paging structure level");}
+            _ => {
+                panic!("Invalid paging structure level");
+            }
         } as usize;
         let mut entry = &mut self.entries[index];
         match level {
@@ -93,21 +99,28 @@ impl AddressSpace {
                 entry.set_physical_addr(ppn);
             }
             3..=4 => {
-                if (entry.present() == 0) {
+                if entry.present() == 0 {
                     println!("creating additional page table");
                     entry.set_present(1);
                     entry.set_writable(1);
                     entry.set_physical_addr(alloc() / PAGE_SIZE);
                 }
-                entry.get_address_space().create_huge_mapping_helper(vpn, ppn, level - 1);
+                entry
+                    .get_address_space()
+                    .create_huge_mapping_helper(vpn, ppn, level - 1);
             }
-            _ => {panic!("Invalid paging structure level");}
+            _ => {
+                panic!("Invalid paging structure level");
+            }
         }
     }
     /// Load this address space in CR3
     pub fn activate(&self) {
         unsafe {
-            println!("switching to address space at 0x{:x}", self as *const AddressSpace as usize);
+            println!(
+                "switching to address space at 0x{:x}",
+                self as *const AddressSpace as usize
+            );
             machine::load_cr3(self as *const AddressSpace as u64);
         }
     }
@@ -115,7 +128,7 @@ impl AddressSpace {
 
 fn create_identity_mappings(high_page: u64) -> &'static mut AddressSpace {
     let address_space = AddressSpace::new();
-    let mut address_space_ref = unsafe {&mut *address_space};
+    let mut address_space_ref = unsafe { &mut *address_space };
     // The first 2MB
     for i in 1..0x200 {
         address_space_ref.create_mapping(i, i);
@@ -130,18 +143,18 @@ fn create_identity_mappings(high_page: u64) -> &'static mut AddressSpace {
     }
     // Map MMIO
     unsafe {
-        let lapic: u64 = (config.local_apic as u64) / PAGE_SIZE;
+        let lapic: u64 = (CONFIG.local_apic as u64) / PAGE_SIZE;
         println!("mapping {:x}", lapic);
         address_space_ref.create_mapping(lapic, lapic);
     }
     address_space_ref
 }
 
-/**
- * Represents a memory address in terms of its indices into
- * the paging structure
- */
 bitfield! {
+    /**
+    * Represents a memory address in terms of its indices into
+    * the paging structure
+    */
     #[repr(transparent)]
     pub struct Address(u64);
     u64;
@@ -151,10 +164,10 @@ bitfield! {
     pml4_index, _: 35, 27;
 }
 
-/**
- * Represents an entry in the PML4/PDPT/PD/PT
- */
 bitfield! {
+    /**
+    * Represents an entry in the PML4/PDPT/PD/PT
+    */
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     pub struct AddressSpaceEntry(u64);
@@ -169,9 +182,7 @@ bitfield! {
 
 impl AddressSpaceEntry {
     pub fn get_address_space(&self) -> &mut AddressSpace {
-        unsafe {
-            &mut *((self.physical_addr() * PAGE_SIZE) as *mut AddressSpace)
-        }
+        unsafe { &mut *((self.physical_addr() * PAGE_SIZE) as *mut AddressSpace) }
     }
 }
 
@@ -185,8 +196,8 @@ static PAGE_SIZE: u64 = 0x1000;
 pub fn init() {
     {
         let mut vmm_allocator = VMM_ALLOCATOR.lock();
-        vmm_allocator.end_phys_mem = unsafe {config.high_phys_mem};
-        if (vmm_allocator.end_phys_mem < vmm_allocator.start_phys_mem) {
+        vmm_allocator.end_phys_mem = unsafe { CONFIG.high_phys_mem };
+        if vmm_allocator.end_phys_mem < vmm_allocator.start_phys_mem {
             panic!("Failed in VMM init: not enough physical memory on the system");
         }
         println!("end_phys_mem: {:x}", vmm_allocator.end_phys_mem);
@@ -202,12 +213,12 @@ pub fn init() {
 pub fn alloc() -> u64 {
     let mut vmm_allocator = VMM_ALLOCATOR.lock();
     let result: u64;
-    if (vmm_allocator.start_phys_mem != vmm_allocator.end_phys_mem) {
+    if vmm_allocator.start_phys_mem != vmm_allocator.end_phys_mem {
         result = vmm_allocator.start_phys_mem;
         vmm_allocator.start_phys_mem += PAGE_SIZE;
     } else {
         // TODO: Demand paging
-        if (vmm_allocator.next == 0) {
+        if vmm_allocator.next == 0 {
             panic!("Out of physical frames.");
         }
         result = vmm_allocator.next;

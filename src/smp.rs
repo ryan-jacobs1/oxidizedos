@@ -1,6 +1,6 @@
 use core::sync::atomic::AtomicPtr;
 use core::sync::atomic::Ordering;
-use crate::config::config;
+use crate::config::CONFIG;
 use crate::machine;
 use crate::println;
 
@@ -40,7 +40,7 @@ impl SMP {
 
 pub fn init_bsp() {
     unsafe {
-        LAPIC = Some(SMP::new(config.local_apic));
+        LAPIC = Some(SMP::new(CONFIG.local_apic));
     }
     init_ap();
 }

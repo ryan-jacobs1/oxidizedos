@@ -8,15 +8,15 @@ use alloc::collections::VecDeque;
 use spin::Mutex;
 
 lazy_static! {
-    pub static ref READY: Mutex<VecDeque<Box<TCB>>> = spin::Mutex::new(VecDeque::new());
-    pub static ref ACTIVE: Mutex<[Box<TCB>; 16]> = {
-        let mut active: [MaybeUninit<Box<TCB>>; 16] = unsafe {
+    pub static ref READY: Mutex<VecDeque<Box<dyn TCB>>> = spin::Mutex::new(VecDeque::new());
+    pub static ref ACTIVE: Mutex<[Box<dyn TCB>; 16]> = {
+        let mut active: [MaybeUninit<Box<dyn TCB>>; 16] = unsafe {
             MaybeUninit::uninit().assume_init()
         };
         for i in 0..16 {
             active[i] = MaybeUninit::new(Box::new(BootstrapTCB::new()));
         }
-        Mutex::new(unsafe {core::mem::transmute::<_, [Box<TCB>; 16]>(active)})
+        Mutex::new(unsafe {core::mem::transmute::<_, [Box<dyn TCB>; 16]>(active)})
     };
 }
 
@@ -28,7 +28,6 @@ pub trait TCB: core::marker::Send {
 
 
 #[repr(C)]
-#[derive(Clone, Copy)]
 struct BootstrapTCB {
     tcb_info: TCBInfo,
     stack_frame_start: Option<usize>,
@@ -69,13 +68,13 @@ impl TCBInfo {
 }
 
 impl<T: Fn() + core::marker::Send> TCBImpl<T> {
-    const num_callee_saved: usize = 6;
+    const NUM_CALLEE_SAVED: usize = 6;
 
     pub fn new(work: T) -> TCBImpl<T> {
         let mut stack = Box::new(Stack::new());
         let end_of_stack = 511;
         stack.stack[end_of_stack] = thread_entry_point as *const () as u64;
-        let index: usize = end_of_stack - TCBImpl::<T>::num_callee_saved - 1;
+        let index: usize = end_of_stack - TCBImpl::<T>::NUM_CALLEE_SAVED - 1;
         stack.stack[index] = 0; // Flags
         stack.stack[index - 1] = 0; // CR2
         let stack_ptr = Box::into_raw(stack);
