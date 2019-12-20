@@ -60,7 +60,6 @@ impl Stack {
     }
 }
 
-
 pub fn main() {}
 
 #[no_mangle]
@@ -105,11 +104,11 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     idt::init();
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
+    println!("smp::me(): {}", smp::me());
     unsafe {
         //ALLOCATOR.init(0x200000, 0x800000);
         ALLOCATOR.lock().init(0x200000, 0x800000);
     }
-    println!("smp::me(): {}", smp::me());
     let reset_eip = machine::ap_entry as *const () as u32;
     println!("reset eip 0x{:x}", reset_eip);
     println!("Booting up other cores...");
@@ -122,7 +121,6 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         smp::ipi(i, 0x4600 | (reset_eip >> 12));
         while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
-    loop {}
     /*
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);
@@ -136,13 +134,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let aligned_heap_val = Box::<u64>::new(17);
     let aligned_ptr = Box::into_raw(aligned_heap_val);
     println!("aligned? val at {:x}", aligned_ptr as usize);
-    
+    /*
     let mut stuff = vec::Vec::new();
     for i in 0..499 {
         stuff.push(i);
     }
     println!("{:?}", stuff);
-    
+    */
     loop {}
 }
 

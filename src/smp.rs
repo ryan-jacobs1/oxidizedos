@@ -69,16 +69,17 @@ pub fn init_ap() {
 
 pub fn me() -> u32 {
     unsafe {
-        /*
+        
         if let Some(ref lapic) = LAPIC {
             let result = lapic.id.load(Ordering::SeqCst);
+            println!("result: {}", *result);
             (*(result) >> 24)
         }
         else {
             panic!("smp::me() failed");
         }
-        */
-        core::ptr::read_volatile(0xfee00020 as *const u32) >> 24
+        
+        //core::ptr::read_volatile(0xfee00020 as *const u32) >> 24
     }
 }
 
