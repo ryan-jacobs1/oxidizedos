@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(alloc_error_handler)]
 #![feature(panic_info_message)]
+#![feature(box_syntax)]
 
 mod machine;
 mod u8250;
@@ -30,7 +31,6 @@ use config::mb_info;
 use config::CONFIG;
 use heap::{Heap, Block};
 use linked_list_allocator::LockedHeap;
-
 
 
 
@@ -65,8 +65,14 @@ pub fn main() {}
 
 #[no_mangle]
 pub extern "C" fn _ap_start() -> ! {
+    unsafe {
+        println!("rsp is {:x}", machine::get_rsp());
+    }
+    vmm::init_ap();
+    //idt::init_ap();
+    smp::init_ap();
+    println!("AP {} reached _ap_start", smp::me());
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
-    println!("AP reached _ap_start");
     thread::surrender();
     loop {}
 }
@@ -78,8 +84,9 @@ pub extern "C" fn pick_stack() -> usize {
 
 #[no_mangle]
 pub extern "C" fn ap_pick_stack() -> usize {
-    let stack = APSTACK.load(Ordering::SeqCst);
-    stack + (4096 - 8)
+    let stack = APSTACK.load(Ordering::SeqCst) + (4096 - 8);
+    println!("picked rsp 0x{:x}", stack);
+    stack
 }
 
 #[no_mangle]
@@ -115,6 +122,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         smp::ipi(i, 0x4600 | (reset_eip >> 12));
         while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
+    loop {}
     /*
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);

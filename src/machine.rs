@@ -16,6 +16,7 @@ extern "C" {
     pub fn cli();
     pub fn sti();
     pub fn get_flags() -> u64;
+    pub fn get_rsp() -> u64;
 }
 
 /// Disables interrupts, and returns whether or not interrupts were enabled

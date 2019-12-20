@@ -210,6 +210,13 @@ pub fn init() {
     println!("Running with a new address space!");
 }
 
+pub fn init_ap() {
+    println!("called vmm init ap");
+    let new_address_space = AddressSpace::new_with_identity();
+    //new_address_space.create_mapping(0xfee00, 0xfee00);
+    new_address_space.activate();
+}
+
 pub fn alloc() -> u64 {
     let mut vmm_allocator = VMM_ALLOCATOR.lock();
     let result: u64;

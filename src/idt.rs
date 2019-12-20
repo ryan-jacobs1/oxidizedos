@@ -38,6 +38,13 @@ pub fn init() {
     }
 }
 
+pub fn init_ap() {
+    let idt_record_ptr: u64 = unsafe {&IDTRECORD as *const IDTRecord as u64};
+    unsafe {
+        machine::lidt(idt_record_ptr);
+    }
+}
+
 pub fn interrupt(index: usize, handler: unsafe extern "C" fn()) {
     let mut idt_entry = IDTEntryWrapper::new();
     let ptr = handler as *const () as u64;

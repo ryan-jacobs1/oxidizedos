@@ -6,6 +6,7 @@ use crate::machine;
 use core::mem::MaybeUninit;
 use alloc::collections::VecDeque;
 use spin::Mutex;
+use crate::smp;
 
 lazy_static! {
     pub static ref READY: Mutex<VecDeque<Box<dyn TCB>>> = spin::Mutex::new(VecDeque::new());
@@ -71,7 +72,7 @@ impl<T: Fn() + core::marker::Send> TCBImpl<T> {
     const NUM_CALLEE_SAVED: usize = 6;
 
     pub fn new(work: T) -> TCBImpl<T> {
-        let mut stack = Box::new(Stack::new());
+        let mut stack = box Stack::new();
         let end_of_stack = 511;
         stack.stack[end_of_stack] = thread_entry_point as *const () as u64;
         let index: usize = end_of_stack - TCBImpl::<T>::NUM_CALLEE_SAVED - 1;
@@ -98,7 +99,7 @@ impl<T: Fn() + core::marker::Send> TCB for TCBImpl<T> {
 
 #[no_mangle]
 pub extern "C" fn thread_entry_point() -> ! {
-    println!("thread arrived at entry point");
+    println!("thread arrived at entry point with rsp {:x}", unsafe {machine::get_rsp()});
     //work();
     println!("thread finished work");
     loop {}
@@ -107,6 +108,7 @@ pub extern "C" fn thread_entry_point() -> ! {
 /// Yield is a reserved word in Rust, so we use a synonym
 pub fn surrender() {
     let mut test1 = Box::new(TCBImpl::new(|| ()));
+    println!("{} in surrender after heap allocation", smp::me());
     let mut test2 = Box::new(TCBImpl::new(|| ()));
     println!("attempting to context switch");
     let x = test2.get_info();

@@ -120,3 +120,8 @@ get_flags:
 	pushfq
 	pop rax
 	ret
+
+.global get_rsp
+get_rsp:
+	mov rax, rsp
+	ret
