@@ -12,33 +12,50 @@ use core::borrow::BorrowMut;
 
 lazy_static! {
     pub static ref READY: Mutex<VecDeque<Box<dyn TCB>>> = spin::Mutex::new(VecDeque::new());
-    pub static ref ACTIVE: Mutex<[Box<dyn TCB>; 16]> = {
-        let mut active: [MaybeUninit<Box<dyn TCB>>; 16] =
+    pub static ref ACTIVE: Mutex<[Option<Box<dyn TCB>>; 16]> = {
+        let mut active: [MaybeUninit<Option<Box<dyn TCB>>>; 16] =
             unsafe { MaybeUninit::uninit().assume_init() };
         for i in 0..16 {
-            active[i] = MaybeUninit::new(Box::new(BootstrapTCB::new()));
+            active[i] = MaybeUninit::new(Some(Box::new(BootstrapTCB::new())));
         }
-        Mutex::new(unsafe { core::mem::transmute::<_, [Box<dyn TCB>; 16]>(active) })
+        Mutex::new(unsafe { core::mem::transmute::<_, [Option<Box<dyn TCB>>; 16]>(active) })
     };
+    
+    
+    pub static ref CLEANUP: [Mutex<TaskHolder>; 16] = {
+        let mut cleanup: [MaybeUninit<Mutex<TaskHolder>>; 16] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+        for i in 0..16 {
+            cleanup[i] = MaybeUninit::new(Mutex::new(TaskHolder::new()));
+        }
+        unsafe { core::mem::transmute::<_, [Mutex<TaskHolder>; 16]>(cleanup) }
+    };
+    
 }
 
+
+/*
 pub fn get_active() -> &'static dyn TCB {
     let was = machine::disable();
-    let active = ACTIVE.lock()[smp::me() as usize].borrow_mut();
+    let active: &'static dyn TCB = ACTIVE.lock()[smp::me() as usize].borrow_mut();
     machine::enable(was);
     active
 }
-
-pub fn swap_active(swap_to: Box<dyn TCB>) -> Box<dyn TCB> {
+*/
+pub fn swap_active(swap_to: Option<Box<dyn TCB>>) -> Option<Box<dyn TCB>> {
     let was = machine::disable();
     let mut result = swap_to;
     core::mem::swap(&mut result, &mut ACTIVE.lock()[smp::me() as usize]);
+    machine::enable(was);
     result
 }
 
 
-pub trait TCB: core::marker::Send {
+pub trait TCB: core::marker::Send + core::marker::Sync {
     fn get_info(&mut self) -> *mut TCBInfo;
+    fn set_leave_me_alone(&mut self, flag: bool);
+    fn get_leave_me_alone(&mut self) -> bool;
+    fn do_work(&self) -> ;
 }
 
 #[repr(C)]
@@ -60,13 +77,26 @@ impl TCB for BootstrapTCB {
     fn get_info(&mut self) -> *mut TCBInfo {
         &mut self.tcb_info as *mut TCBInfo
     }
+
+    fn get_leave_me_alone(&mut self) -> bool {
+        self.tcb_info.leave_me_alone
+    }
+
+    fn set_leave_me_alone(&mut self, flag: bool) {
+        self.tcb_info.leave_me_alone = flag;
+    }
+
+    fn get_work(&self) -> Option<Box<T>> {
+        panic!("BootstrapTCB has no work to do!");
+    }
 }
 
+
 #[repr(C)]
-struct TCBImpl<T: Fn() + core::marker::Send> {
+struct TCBImpl<T: Fn() + core::marker::Send + core::marker::Sync> {
     tcb_info: TCBInfo,
     stack: Box<Stack>,
-    work: Box<T>,
+    work: Option<Box<T>>,
 }
 
 #[repr(C)]
@@ -85,7 +115,7 @@ impl TCBInfo {
     }
 }
 
-impl<T: Fn() + core::marker::Send> TCBImpl<T> {
+impl<T: Fn() + core::marker::Send + core::marker::Sync> TCBImpl<T> {
     const NUM_CALLEE_SAVED: usize = 6;
 
     pub fn new(work: T) -> TCBImpl<T> {
@@ -113,9 +143,40 @@ impl<T: Fn() + core::marker::Send> TCBImpl<T> {
     }
 }
 
-impl<T: Fn() + core::marker::Send> TCB for TCBImpl<T> {
+impl<T: Fn() + core::marker::Send + core::marker::Sync> TCB for TCBImpl<T> {
     fn get_info(&mut self) -> *mut TCBInfo {
         &mut self.tcb_info as *mut TCBInfo
+    }
+
+    fn get_leave_me_alone(&mut self) -> bool {
+        self.tcb_info.leave_me_alone
+    }
+
+    fn set_leave_me_alone(&mut self, flag: bool) {
+        self.tcb_info.leave_me_alone = flag;
+    }
+
+    fn 
+}
+
+
+type Cleanup = FnOnce() + core::marker::Send + core::marker::Sync;
+
+/// Holds tasks to perform after context-switching
+/// No mutual exclusion needed as this is a per-core data structure
+pub struct TaskHolder {
+    tasks: VecDeque<Box<Cleanup>>,
+}
+
+impl TaskHolder {
+    pub fn new() -> TaskHolder {
+        TaskHolder {tasks: VecDeque::new()}
+    }
+    pub fn add_task(&mut self, task: Box<Cleanup>) {
+        self.tasks.push_back(task);
+    }
+    pub fn get_task(&mut self) -> Option<Box<Cleanup>> {
+        self.tasks.pop_front()
     }
 }
 
@@ -124,13 +185,85 @@ pub extern "C" fn thread_entry_point() -> ! {
     println!("thread arrived at entry point with rsp {:x}", unsafe {
         machine::get_rsp()
     });
-    //work();
+    cleanup();
+    let was = machine::disable();
+    let active = ACTIVE.lock()[smp::me() as usize];
+    machine::enable(was);
     println!("thread finished work");
     loop {}
 }
 
-/// Yield is a reserved word in Rust, so we use a synonym
 pub fn surrender() {
+    surrender_help(true);
+}
+
+pub fn stop() {
+    surrender_help(false);
+}
+
+/// Yield is a reserved word in Rust, so we use a synonym
+fn surrender_help(run_again: bool) {
+    // If there's no active thread, return as we are currently surrendering
+    let mut current_thread = match swap_active(None) {
+        Some(mut tcb) => {tcb},
+        None => return
+    };
+    // Don't need to disable interrupts, as we will run on this core until we context switch
+    let me = smp::me() as usize;
+    let current_thread_info = current_thread.get_info();
+    if (run_again) {
+        let add_to_ready = move || {
+            READY.lock().push_back(current_thread);
+        };
+        CLEANUP[me].lock().add_task(Box::new(add_to_ready));
+    } else {
+        let drop_current = move || {
+            let x = current_thread;
+        };
+        CLEANUP[me].lock().add_task(Box::new(drop_current));
+    }
+}
+
+fn block(current_thread_info: *mut TCBInfo) {
+    // Find something to switch to
+    let mut next_thread = match READY.lock().pop_front() {
+        Some(mut tcb) => tcb,
+        None => {
+            // Implementation Note: Potentially a trade off to switch to something that switches back,
+            // but most of the time, there should be something in the ready q
+            Box::new(TCBImpl::new(|| {surrender()}))
+        }
+    };
+    let next_thread_info = next_thread.get_info();
+    let assert_as_active = move || {
+        // The next thread will now assert itself as the active thread
+        swap_active(Some(next_thread));
+    };
+    CLEANUP[smp::me() as usize].lock().add_task(Box::new(assert_as_active));
+    unsafe {
+        machine::context_switch(current_thread_info, next_thread_info)
+    }
+    cleanup();
+}
+
+fn cleanup() {
+    let was = machine::disable();
+    let me = smp::me() as usize;
+    let mut cleanup_work = CLEANUP[me].lock();
+    machine::enable(was);
+    loop {
+        match cleanup_work.get_task() {
+            Some(work) => work(),
+            None => break
+        }
+    }
+}
+
+pub fn schedule(tcb: Box<dyn TCB>) {
+    READY.lock().push_back(tcb);
+}
+
+pub fn surrender_test() {
     let mut test1 = Box::new(TCBImpl::new(|| ()));
     println!("{} in surrender after heap allocation", smp::me());
     let mut test2 = Box::new(TCBImpl::new(|| ()));
