@@ -3,6 +3,7 @@
 #![feature(alloc_error_handler)]
 #![feature(panic_info_message)]
 #![feature(box_syntax)]
+#![feature(trait_alias)]
 
 mod machine;
 mod u8250;
@@ -31,6 +32,7 @@ use config::mb_info;
 use config::CONFIG;
 use heap::{Heap, Block};
 use linked_list_allocator::LockedHeap;
+use thread::TCBImpl;
 
 
 
@@ -70,9 +72,16 @@ pub extern "C" fn _ap_start() -> ! {
     vmm::init_ap();
     //idt::init_ap();
     smp::init_ap();
-    println!("AP {} reached _ap_start", smp::me());
+    let me = smp::me();
+    println!("AP {} reached _ap_start", me);
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
-    thread::surrender();
+    if (me == 1) {
+        /*
+        let x = TCBImpl::new(|| {println!("yay {}!", smp::me());});
+        thread::schedule(box x);
+        thread::surrender();
+        */
+    }
     loop {}
 }
 
@@ -108,7 +117,8 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     unsafe {
         //ALLOCATOR.init(0x200000, 0x800000);
         ALLOCATOR.lock().init(0x200000, 0x800000);
-    }
+    }    
+    thread::init();
     let reset_eip = machine::ap_entry as *const () as u32;
     println!("reset eip 0x{:x}", reset_eip);
     println!("Booting up other cores...");
@@ -121,6 +131,12 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         smp::ipi(i, 0x4600 | (reset_eip >> 12));
         while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
+
+    let x = box TCBImpl::new(|| {
+        println!("me: {}", smp::me());
+    });
+    thread::schedule(x);
+    thread::surrender();
     /*
     for (i, &byte) in HELLO.iter().enumerate() {
         uart.put(byte as u8);

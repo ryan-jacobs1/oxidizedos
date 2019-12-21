@@ -41,17 +41,17 @@ impl SMP {
 pub fn init_bsp() {
     unsafe {
         LAPIC = Some(SMP::new(CONFIG.local_apic));
-        if let Some(ref lapic) = LAPIC {
-            let x = &mut 0x1ff;
-            //lapic.spurious.store(x, Ordering::SeqCst);
-            core::ptr::write_volatile(0xfee000f0 as *mut u32, 0x1ff);
-        }
     }
     init_ap();
 }
 
 pub fn init_ap() {
     unsafe {
+        if let Some(ref lapic) = LAPIC {
+            let x = &mut 0x1ff;
+            //lapic.spurious.store(x, Ordering::SeqCst);
+            core::ptr::write_volatile(0xfee000f0 as *mut u32, 0x1ff);
+        }
         // Disable PIC
         machine::outb(0xa1, 0xff);
         machine::outb(0x21, 0xff);
@@ -69,7 +69,7 @@ pub fn init_ap() {
 
 pub fn me() -> u32 {
     unsafe {
-        
+        /*
         if let Some(ref lapic) = LAPIC {
             let result = lapic.id.load(Ordering::SeqCst);
             println!("result: {}", *result);
@@ -78,8 +78,10 @@ pub fn me() -> u32 {
         else {
             panic!("smp::me() failed");
         }
-        
-        //core::ptr::read_volatile(0xfee00020 as *const u32) >> 24
+        */
+        let result = core::ptr::read_volatile(0xfee00020 as *const u32);
+        println!("result {}", result);
+        result >> 24
     }
 }
 
