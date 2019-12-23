@@ -67,7 +67,7 @@ pub fn init_ap() {
     }
 }
 
-pub fn me() -> u32 {
+pub fn me() -> usize {
     unsafe {
         /*
         if let Some(ref lapic) = LAPIC {
@@ -81,7 +81,7 @@ pub fn me() -> u32 {
         */
         let result = core::ptr::read_volatile(0xfee00020 as *const u32);
         println!("result {}", result);
-        result >> 24
+        (result >> 24) as usize
     }
 }
 
