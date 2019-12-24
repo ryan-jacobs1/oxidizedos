@@ -12,16 +12,16 @@ use crate::spinlock::SpinLock;
 /// A universal synchronization primitive. Blocks if count == 0.
 struct Semaphore {
     control: SpinLock,
-    internals: UnsafeCell<SemaphoreInternals>
+    internals: SemaphoreInternalWrapper
 }
 
 impl Semaphore {
     pub fn new() -> Arc<Semaphore> {
-        let sem = box Semaphore {control: SpinLock::new(), internals: UnsafeCell::new(SemaphoreInternals::new())};
+        let sem = box Semaphore {control: SpinLock::new(), internals: SemaphoreInternalWrapper::new()};
         let sem_arc: Arc<Semaphore> = Arc::from(sem);
         sem_arc.control.lock();
         unsafe {
-            let internals = sem_arc.internals.get();
+            let internals = sem_arc.internals.data.get();
             (*internals).weak_self = Some(Arc::downgrade(&sem_arc));
         }
         sem_arc
@@ -29,7 +29,7 @@ impl Semaphore {
     
     pub fn up(&mut self) {
         self.control.lock();
-        let internals = self.internals.get();
+        let internals = self.internals.data.get();
         unsafe {
             match (*internals).blocked.pop_front() {
                 Some(tcb) => {
@@ -43,7 +43,7 @@ impl Semaphore {
 
     pub fn down(&mut self) {
         let lock = self.control.lock();
-        let mut internals = unsafe {Box::from_raw(self.internals.get())};
+        let mut internals = unsafe {Box::from_raw(self.internals.data.get())};
         let count = unsafe {((*internals).count)};
         if (count == 0) {
             // Block
@@ -65,8 +65,7 @@ impl Semaphore {
                 let ptr = Box::into_raw(internals);
                 me.control.unlock();
             };
-            let x = box add_to_blocked_queue;
-            //CLEANUP[smp::me()].lock().add_task(x);
+            CLEANUP[smp::me()].lock().add_task(box add_to_blocked_queue);
         }
         else {
             unsafe {
@@ -79,17 +78,30 @@ impl Semaphore {
     
 }
 
+struct SemaphoreInternalWrapper {
+    data: UnsafeCell<SemaphoreInternals>
+}
+
+impl SemaphoreInternalWrapper {
+    pub fn new() -> SemaphoreInternalWrapper {
+        SemaphoreInternalWrapper {data: UnsafeCell::new(SemaphoreInternals::new())}
+    }
+}
+
+unsafe impl core::marker::Sync for SemaphoreInternalWrapper {}
+unsafe impl core::marker::Send for SemaphoreInternalWrapper {}
+
+
 struct SemaphoreInternals {
     count: u64,
     blocked: VecDeque<Box<dyn TCB>>,
     weak_self: Option<Weak<Semaphore>>,
 }
 
-impl<'a> SemaphoreInternals {
+impl SemaphoreInternals {
     pub fn new() -> SemaphoreInternals {
         SemaphoreInternals { count: 0, blocked: VecDeque::new(), weak_self: None}
     }
 }
 
-unsafe impl core::marker::Sync for SemaphoreInternals {}
-unsafe impl core::marker::Send for SemaphoreInternals {}
+
