@@ -13,6 +13,8 @@ mod vmm;
 mod smp;
 mod idt;
 mod thread;
+mod semaphore;
+mod spinlock;
 
 #[macro_use]
 extern crate bitfield;

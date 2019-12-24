@@ -7,16 +7,17 @@ use crate::thread;
 use crate::smp;
 use spin::{Mutex, MutexGuard};
 use core::cell::UnsafeCell;
+use crate::spinlock::SpinLock;
 
 /// A universal synchronization primitive. Blocks if count == 0.
-struct Semaphore<'a> {
-    control: Mutex<()>,
-    internals: UnsafeCell<SemaphoreInternals<'a>>
+struct Semaphore {
+    control: SpinLock,
+    internals: UnsafeCell<SemaphoreInternals>
 }
 
-impl<'a> Semaphore<'a> {
-    pub fn new() -> Arc<Semaphore<'a>> {
-        let sem = box Semaphore {control: Mutex::new(()), internals: UnsafeCell::new(SemaphoreInternals::new())};
+impl Semaphore {
+    pub fn new() -> Arc<Semaphore> {
+        let sem = box Semaphore {control: SpinLock::new(), internals: UnsafeCell::new(SemaphoreInternals::new())};
         let sem_arc: Arc<Semaphore> = Arc::from(sem);
         sem_arc.control.lock();
         unsafe {
@@ -27,7 +28,7 @@ impl<'a> Semaphore<'a> {
     }
     
     pub fn up(&mut self) {
-        let lock = self.control.lock();
+        self.control.lock();
         let internals = self.internals.get();
         unsafe {
             match (*internals).blocked.pop_front() {
@@ -37,6 +38,7 @@ impl<'a> Semaphore<'a> {
                 None => (*internals).count += 1,
             }
         }
+        self.control.unlock();
     }
 
     pub fn down(&mut self) {
@@ -50,40 +52,42 @@ impl<'a> Semaphore<'a> {
                 None => panic!("Called down on semaphore with no active thread."),
             };
             let current_state = active.get_info();
-            internals.held_lock = Some(lock);
+            let me: Arc<Semaphore> = match internals.weak_self {
+                Some(ref ptr) => match ptr.upgrade() {
+                    Some(ptr) => ptr,
+                    None => panic!("Semaphore has been dropped and the weak pointer was invalid")
+                }
+                None => panic!("No weak pointer")
+            };
             let add_to_blocked_queue = move || {
                 // Move lock ownership to lambda
                 internals.blocked.push_back(active);
-                let lock = match internals.held_lock {
-                    Some(lock) => lock,
-                    None => panic!("Failed to hold lock during block"),
-                };
                 let ptr = Box::into_raw(internals);
-                drop(lock);
+                me.control.unlock();
             };
             let x = box add_to_blocked_queue;
-            CLEANUP[smp::me()].lock().add_task(x);
+            //CLEANUP[smp::me()].lock().add_task(x);
         }
         else {
             unsafe {
                 internals.count -= 1;
                 let ptr = Box::into_raw(internals);
             }
+            self.control.unlock();
         }
     }
     
 }
 
-struct SemaphoreInternals<'a> {
+struct SemaphoreInternals {
     count: u64,
     blocked: VecDeque<Box<dyn TCB>>,
-    weak_self: Option<Weak<Semaphore<'a>>>,
-    held_lock: Option<MutexGuard<'a, ()>>,
+    weak_self: Option<Weak<Semaphore>>,
 }
 
-impl<'a> SemaphoreInternals<'a> {
-    pub fn new() -> SemaphoreInternals<'a> {
-        SemaphoreInternals { count: 0, blocked: VecDeque::new(), weak_self: None, held_lock: None}
+impl<'a> SemaphoreInternals {
+    pub fn new() -> SemaphoreInternals {
+        SemaphoreInternals { count: 0, blocked: VecDeque::new(), weak_self: None}
     }
 }
 
