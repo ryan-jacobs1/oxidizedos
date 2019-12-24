@@ -12,6 +12,8 @@ use core::borrow::BorrowMut;
 
 lazy_static! {
     pub static ref READY: Mutex<VecDeque<Box<dyn TCB>>> = spin::Mutex::new(VecDeque::new());
+
+    /// Invariant: When Active[i] == None, core i is guaranteed not to context switch due to a timer interrupt
     pub static ref ACTIVE: Mutex<[Option<Box<dyn TCB>>; 16]> = {
         let mut active: [MaybeUninit<Option<Box<dyn TCB>>>; 16] =
             unsafe { MaybeUninit::uninit().assume_init() };
