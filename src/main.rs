@@ -70,6 +70,15 @@ impl Stack {
     }
 }
 
+pub struct BoxedStack {
+    pub stack: Option<Box<[u64]>>
+}
+
+impl BoxedStack {
+    pub fn new() -> BoxedStack {
+        BoxedStack {stack: Some(box [0; 512])}
+    }
+}
 
 
 pub fn main() {}

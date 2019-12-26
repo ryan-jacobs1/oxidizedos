@@ -1,6 +1,7 @@
 use crate::machine;
 use crate::println;
 use crate::Stack;
+use crate::BoxedStack;
 use alloc::boxed::Box;
 
 use crate::smp;
@@ -99,7 +100,7 @@ impl TCB for BootstrapTCB {
 #[repr(C)]
 pub struct TCBImpl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> {
     tcb_info: TCBInfo,
-    stack: Box<Stack>,
+    stack: Box<[u64]>,
     work: Option<Box<T>>,
 }
 
@@ -123,14 +124,15 @@ impl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> TCBImpl<T> {
     const NUM_CALLEE_SAVED: usize = 6;
 
     pub fn new(work: T) -> TCBImpl<T> {
-        let mut stack = box Stack::new();
+        let mut stack: Box<[u64]> = box [0; 512];
         let end_of_stack = 511;
-        stack.stack[end_of_stack] = thread_entry_point as *const () as u64;
+        stack[end_of_stack] = thread_entry_point as *const () as u64;
         let index: usize = end_of_stack - TCBImpl::<T>::NUM_CALLEE_SAVED - 1;
-        stack.stack[index] = 0; // Flags
-        stack.stack[index - 1] = 0; // CR2
+        stack[index] = 0; // Flags
+        stack[index - 1] = 0; // CR2
         let stack_ptr = Box::into_raw(stack);
-        let stack_ptr_as_usize = stack_ptr as usize;
+        let stack_ptr_as_usize = stack_ptr as *mut u64 as usize;
+        stack = unsafe {Box::from_raw(stack_ptr)};
         /*
         println!(
             "loaded return at 0x{:x}",
@@ -140,7 +142,6 @@ impl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> TCBImpl<T> {
         let x = stack_ptr_as_usize + ((index - 1) * core::mem::size_of::<usize>());
         //println!("initial rsp 0x{:x}", x);
         let tcb_info = TCBInfo::new(x);
-        stack = unsafe { Box::from_raw(stack_ptr) };
         TCBImpl {
             tcb_info: tcb_info,
             stack: stack,
@@ -175,6 +176,8 @@ impl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> TCB for TCBImp
 }
 
 
+
+
 type Cleanup = FnOnce() + core::marker::Send + core::marker::Sync;
 
 /// Holds tasks to perform after context-switching
@@ -203,10 +206,11 @@ impl TaskHolder {
     }
 }
 
+// TODO put the TaskHolder in the TCB so the closure is dropped
 #[no_mangle]
 pub extern "C" fn thread_entry_point() -> ! {
     cleanup();
-    println!("initial rsp is 0x{:x}", unsafe {machine::get_rsp()});
+    //println!("initial rsp is 0x{:x}", unsafe {machine::get_rsp()});
     {
     let was = machine::disable();
     let mut active = match swap_active(None) {
@@ -261,7 +265,7 @@ fn surrender_help(run_again: bool) {
         println!("adding stop logic to cleanup");
         let drop_current = move || {
             let x = current_thread;
-            println!("dropping the previous thread");
+            //println!("dropping the previous thread");
             drop(x);
         };
         CLEANUP[me].lock().add_task(Box::new(drop_current));
@@ -278,7 +282,7 @@ fn block(current_thread_info: *mut TCBInfo) {
             // but most of the time, there should be something in the ready q
             println!("nothing to switch to");
             let busy_work = move || {
-                println!("busy work");
+                //println!("busy work");
                 return
             };
             let busy_work_box = Box::new(TCBImpl::new(busy_work));
