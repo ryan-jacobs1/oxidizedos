@@ -262,7 +262,7 @@ fn surrender_help(run_again: bool) {
         };
         CLEANUP[me].lock().add_task(Box::new(add_to_ready));
     } else {
-        println!("adding stop logic to cleanup");
+        //println!("adding stop logic to cleanup");
         let drop_current = move || {
             let x = current_thread;
             //println!("dropping the previous thread");
@@ -280,7 +280,7 @@ fn block(current_thread_info: *mut TCBInfo) {
         None => {
             // Implementation Note: Potentially a trade off to switch to something that switches back,
             // but most of the time, there should be something in the ready q
-            println!("nothing to switch to");
+            //println!("nothing to switch to");
             let busy_work = move || {
                 //println!("busy work");
                 return
