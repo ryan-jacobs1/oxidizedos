@@ -60,7 +60,7 @@ impl Semaphore {
                 None => panic!("No weak pointer")
             };
             let add_to_blocked_queue = move || {
-                // Move lock ownership to lambda
+                // Move internals ownership to lambda and release lock
                 internals.blocked.push_back(active);
                 let ptr = Box::into_raw(internals);
                 me.control.unlock();
@@ -78,6 +78,7 @@ impl Semaphore {
     
 }
 
+/// Thread-safe as mutual exclusion is provided through holding the control semaphore
 struct SemaphoreInternalWrapper {
     data: UnsafeCell<SemaphoreInternals>
 }

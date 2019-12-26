@@ -33,8 +33,10 @@ use u8250::U8250;
 use config::mb_info;
 use config::CONFIG;
 use heap::{Heap, Block};
+//use heap::LockedHeap;
 use linked_list_allocator::LockedHeap;
 use thread::TCBImpl;
+use alloc::sync::Arc;
 
 
 
@@ -47,6 +49,7 @@ static mut ALLOCATOR: LockedHeap = LockedHeap::new();
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
+
 
 static mut STACK: Stack = Stack::new();
 static APSTACK: AtomicUsize = AtomicUsize::new(0);
@@ -62,7 +65,12 @@ impl Stack {
     pub const fn new() -> Stack {
         Stack {stack: [0; 512]}
     }
+    pub fn boxed_new() -> Box<Stack> {
+        box Stack {stack: [0; 512]}
+    }
 }
+
+
 
 pub fn main() {}
 
@@ -77,14 +85,12 @@ pub extern "C" fn _ap_start() -> ! {
     let me = smp::me();
     println!("AP {} reached _ap_start", me);
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
-    if (me == 1) {
-        /*
-        let x = TCBImpl::new(|| {println!("yay {}!", smp::me());});
-        thread::schedule(box x);
-        thread::surrender();
-        */
+    let num_cores = unsafe {CONFIG.total_procs};
+    while CORES_ACTIVE.load(Ordering::SeqCst) < num_cores {}
+    loop {
+        thread::stop();
+        //panic!("thread::stop returned");
     }
-    loop {}
 }
 
 #[no_mangle]
@@ -133,73 +139,18 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         smp::ipi(i, 0x4600 | (reset_eip >> 12));
         while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
-
-    let x = box TCBImpl::new(|| {
-        println!("me: {}", smp::me());
-    });
-    thread::schedule(x);
-    thread::surrender();
-    /*
-    for (i, &byte) in HELLO.iter().enumerate() {
-        uart.put(byte as u8);
+    println!("done with ipis");
+    loop {}
+    let counter = Arc::new(AtomicU32::new(0));
+    for i in 0..100 {
+        let c = Arc::clone(&counter);
+        let x = TCBImpl::new(move || {
+            c.fetch_add(1, Ordering::SeqCst);
+        });
+        thread::schedule(box x);
     }
-    */
-    println!("main thread doing some allocation");
-    let heap_val = Box::<u8>::new(41);
-    println!("value on heap {}", heap_val);
-<<<<<<< HEAD
-    let ptr = Box::into_raw(heap_val);
-    println!("location on heap {:x}", ptr as usize);
-    let aligned_heap_val = Box::<u64>::new(17);
-    let aligned_ptr = Box::into_raw(aligned_heap_val);
-    println!("aligned? val at {:x}", aligned_ptr as usize);
-=======
-
-    unsafe {
-        let mut box2 = Box::<u16>::new(16);
-        let box2_ptr = Box::into_raw(box2);
-        println!("Is u16 aligned?: {}", match box2_ptr as usize % core::mem::size_of::<u16>() {
-            0 => "TRUE",
-            _ => "FALSE",
-        });
-        box2 = Box::from_raw(box2_ptr);
-        let mut box3 = Box::<u64>::new(32);
-        let box3_ptr = Box::into_raw(box3);
-        println!("Is u32 aligned?: {}", match box3_ptr as usize % core::mem::size_of::<u64>() {
-            0 => "TRUE",
-            _ => "FALSE",
-        });
-        box3 = Box::from_raw(box3_ptr);
-        let mut box4 = Box::<u64>::new(64);
-        let box4_ptr = Box::into_raw(box4);
-        println!("Is u64 aligned?: {}", match box4_ptr as usize % core::mem::size_of::<u64>() {
-            0 => "TRUE",
-            _ => "FALSE",
-        });
-        box4 = Box::from_raw(box4_ptr);
-        let mut box5 = Box::<u64>::new(64);
-        let box5_ptr = Box::into_raw(box5);
-        println!("Is u64 aligned?: {}", match box5_ptr as usize % core::mem::size_of::<u64>() {
-            0 => "TRUE",
-            _ => "FALSE",
-        });
-        box5 = Box::from_raw(box5_ptr);
-        let mut box6 = Box::<u64>::new(64);
-        let box6_ptr = Box::into_raw(box6);
-        println!("Is u64 aligned?: {}", match box6_ptr as usize % core::mem::size_of::<u64>() {
-            0 => "TRUE",
-            _ => "FALSE",
-        });
-        box6 = Box::from_raw(box6_ptr);
-    }
->>>>>>> master
-    /*
-    let mut stuff = vec::Vec::new();
-    for i in 0..499 {
-        stuff.push(i);
-    }
-    println!("{:?}", stuff);
-    */
+    while counter.load(Ordering::SeqCst) < 100 {}
+    println!("counter: {}", counter.load(Ordering::SeqCst));
     loop {}
 }
 
@@ -214,5 +165,5 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[alloc_error_handler]
 fn alloc_panic(layout: alloc::alloc::Layout) -> ! {
-    panic!("Failure in alloc");
+    panic!("Core {}: Failure in alloc\n", smp::me());
 }

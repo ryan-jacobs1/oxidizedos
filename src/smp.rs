@@ -80,7 +80,7 @@ pub fn me() -> usize {
         }
         */
         let result = core::ptr::read_volatile(0xfee00020 as *const u32);
-        println!("result {}", result);
+        //println!("result {}", result);
         (result >> 24) as usize
     }
 }

@@ -16,3 +16,6 @@ impl SpinLock {
         self.taken.swap(false, Ordering::SeqCst);
     }
 }
+
+unsafe impl core::marker::Send for SpinLock {}
+unsafe impl core::marker::Sync for SpinLock {}

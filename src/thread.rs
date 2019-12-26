@@ -22,6 +22,8 @@ lazy_static! {
         }
         Mutex::new(unsafe { core::mem::transmute::<_, [Option<Box<dyn TCB>>; 16]>(active) })
     };
+
+    pub static ref DEAD_THREADS : Mutex<VecDeque<Box<dyn TCB>>> = Mutex::new(VecDeque::new());
 }
 
 lazy_static! {
@@ -129,12 +131,14 @@ impl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> TCBImpl<T> {
         stack.stack[index - 1] = 0; // CR2
         let stack_ptr = Box::into_raw(stack);
         let stack_ptr_as_usize = stack_ptr as usize;
+        /*
         println!(
             "loaded return at 0x{:x}",
             stack_ptr_as_usize + (end_of_stack * core::mem::size_of::<usize>())
         );
+        */
         let x = stack_ptr_as_usize + ((index - 1) * core::mem::size_of::<usize>());
-        println!("initial rsp 0x{:x}", x);
+        //println!("initial rsp 0x{:x}", x);
         let tcb_info = TCBInfo::new(x);
         stack = unsafe { Box::from_raw(stack_ptr) };
         TCBImpl {
@@ -201,10 +205,9 @@ impl TaskHolder {
 
 #[no_mangle]
 pub extern "C" fn thread_entry_point() -> ! {
-    println!("thread arrived at entry point with rsp {:x}", unsafe {
-        machine::get_rsp()
-    });
     cleanup();
+    println!("initial rsp is 0x{:x}", unsafe {machine::get_rsp()});
+    {
     let was = machine::disable();
     let mut active = match swap_active(None) {
         Some(active) => active,
@@ -213,8 +216,11 @@ pub extern "C" fn thread_entry_point() -> ! {
     let task_holder = &mut active.get_work();
     swap_active(Some(active));
     machine::enable(was);
+    //println!("running task");
     task_holder.run_task();
-    println!("thread finished work");
+    }
+    //println!("thread finished work");
+    stop();
     loop {}
 }
 
@@ -240,7 +246,7 @@ fn surrender_help(run_again: bool) {
     // If there's no active thread, return as we are currently surrendering
     let mut current_thread: Box<dyn TCB> = match swap_active(None) {
         Some(mut tcb) => {tcb},
-        None => return
+        None => {return}
     };
     // Don't need to disable interrupts, as we will run on this core until we context switch
     let me = smp::me() as usize;
@@ -252,8 +258,11 @@ fn surrender_help(run_again: bool) {
         };
         CLEANUP[me].lock().add_task(Box::new(add_to_ready));
     } else {
+        println!("adding stop logic to cleanup");
         let drop_current = move || {
             let x = current_thread;
+            println!("dropping the previous thread");
+            drop(x);
         };
         CLEANUP[me].lock().add_task(Box::new(drop_current));
     }
@@ -262,12 +271,18 @@ fn surrender_help(run_again: bool) {
 
 fn block(current_thread_info: *mut TCBInfo) {
     // Find something to switch to
-    let mut next_thread = match READY.lock().pop_front() {
+    let mut next_thread: Box<dyn TCB> = match READY.lock().pop_front() {
         Some(mut tcb) => tcb,
         None => {
             // Implementation Note: Potentially a trade off to switch to something that switches back,
             // but most of the time, there should be something in the ready q
-            Box::new(TCBImpl::new(|| {stop()}))
+            println!("nothing to switch to");
+            let busy_work = move || {
+                println!("busy work");
+                return
+            };
+            let busy_work_box = Box::new(TCBImpl::new(busy_work));
+            busy_work_box
         }
     };
     let next_thread_info = next_thread.get_info();
@@ -289,8 +304,8 @@ fn cleanup() {
     machine::enable(was);
     loop {
         match cleanup_work.get_task() {
-            Some(work) => work(),
-            None => break
+            Some(work) => {work()},
+            None => {break}
         }
     }
 }
