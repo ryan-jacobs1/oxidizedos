@@ -147,11 +147,52 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     println!("main thread doing some allocation");
     let heap_val = Box::<u8>::new(41);
     println!("value on heap {}", heap_val);
+<<<<<<< HEAD
     let ptr = Box::into_raw(heap_val);
     println!("location on heap {:x}", ptr as usize);
     let aligned_heap_val = Box::<u64>::new(17);
     let aligned_ptr = Box::into_raw(aligned_heap_val);
     println!("aligned? val at {:x}", aligned_ptr as usize);
+=======
+
+    unsafe {
+        let mut box2 = Box::<u16>::new(16);
+        let box2_ptr = Box::into_raw(box2);
+        println!("Is u16 aligned?: {}", match box2_ptr as usize % core::mem::size_of::<u16>() {
+            0 => "TRUE",
+            _ => "FALSE",
+        });
+        box2 = Box::from_raw(box2_ptr);
+        let mut box3 = Box::<u64>::new(32);
+        let box3_ptr = Box::into_raw(box3);
+        println!("Is u32 aligned?: {}", match box3_ptr as usize % core::mem::size_of::<u64>() {
+            0 => "TRUE",
+            _ => "FALSE",
+        });
+        box3 = Box::from_raw(box3_ptr);
+        let mut box4 = Box::<u64>::new(64);
+        let box4_ptr = Box::into_raw(box4);
+        println!("Is u64 aligned?: {}", match box4_ptr as usize % core::mem::size_of::<u64>() {
+            0 => "TRUE",
+            _ => "FALSE",
+        });
+        box4 = Box::from_raw(box4_ptr);
+        let mut box5 = Box::<u64>::new(64);
+        let box5_ptr = Box::into_raw(box5);
+        println!("Is u64 aligned?: {}", match box5_ptr as usize % core::mem::size_of::<u64>() {
+            0 => "TRUE",
+            _ => "FALSE",
+        });
+        box5 = Box::from_raw(box5_ptr);
+        let mut box6 = Box::<u64>::new(64);
+        let box6_ptr = Box::into_raw(box6);
+        println!("Is u64 aligned?: {}", match box6_ptr as usize % core::mem::size_of::<u64>() {
+            0 => "TRUE",
+            _ => "FALSE",
+        });
+        box6 = Box::from_raw(box6_ptr);
+    }
+>>>>>>> master
     /*
     let mut stuff = vec::Vec::new();
     for i in 0..499 {
