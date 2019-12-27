@@ -7,15 +7,15 @@ use crate::println;
 pub static mut LAPIC: Option<SMP> = None;
 
 pub struct SMP {
-    id: AtomicPtr<u32>,
-    spurious: AtomicPtr<u32>,
-    icr_low: AtomicPtr<u32>,
-    icr_high: AtomicPtr<u32>,
-    pub eoi_reg: AtomicPtr<u32>,
-    pub apit_lvl_timer: AtomicPtr<u32>,
-    pub apit_initial_count: AtomicPtr<u32>,
-    pub apit_current_count: AtomicPtr<u32>,
-    pub apit_divide: AtomicPtr<u32>,
+    id: *mut u32,
+    spurious: *mut u32,
+    icr_low: *mut u32,
+    icr_high: *mut u32,
+    pub eoi_reg: *mut u32,
+    pub apit_lvl_timer: *mut u32,
+    pub apit_initial_count: *mut u32,
+    pub apit_current_count: *mut u32,
+    pub apit_divide: *mut u32,
 }
 
 impl SMP {
@@ -25,15 +25,15 @@ impl SMP {
 
     pub fn new(lapic_base: u32) -> SMP {
         SMP {
-            id: AtomicPtr::new((lapic_base + 0x20) as *mut u32),
-            eoi_reg: AtomicPtr::new((lapic_base + 0xb0) as *mut u32),
-            spurious: AtomicPtr::new((lapic_base + 0xf0) as *mut u32),
-            icr_low: AtomicPtr::new((lapic_base + 0x300) as *mut u32),
-            icr_high: AtomicPtr::new((lapic_base + 0x310) as *mut u32),
-            apit_lvl_timer: AtomicPtr::new((lapic_base + 0x320) as *mut u32),
-            apit_initial_count: AtomicPtr::new((lapic_base + 0x380) as *mut u32),
-            apit_current_count: AtomicPtr::new((lapic_base + 0x390) as *mut u32),
-            apit_divide: AtomicPtr::new((lapic_base + 0x3e0) as *mut u32),
+            id: (lapic_base + 0x20) as *mut u32,
+            eoi_reg: (lapic_base + 0xb0) as *mut u32,
+            spurious: (lapic_base + 0xf0) as *mut u32,
+            icr_low: (lapic_base + 0x300) as *mut u32,
+            icr_high: (lapic_base + 0x310) as *mut u32,
+            apit_lvl_timer: (lapic_base + 0x320) as *mut u32,
+            apit_initial_count: (lapic_base + 0x380) as *mut u32,
+            apit_current_count: (lapic_base + 0x390) as *mut u32,
+            apit_divide: (lapic_base + 0x3e0) as *mut u32,
         }
     }
 }
