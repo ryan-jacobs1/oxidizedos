@@ -19,4 +19,4 @@ iso: build
 	grub-mkrescue -o oxos.iso isodir
 
 run: iso build
-	qemu-system-x86_64 -smp 2 -cdrom oxos.iso -nographic --monitor none
+	qemu-system-x86_64 -smp 4 -cdrom oxos.iso -nographic --monitor none
