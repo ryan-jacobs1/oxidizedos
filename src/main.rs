@@ -15,6 +15,7 @@ mod idt;
 mod thread;
 mod semaphore;
 mod spinlock;
+mod ismutex;
 
 #[macro_use]
 extern crate bitfield;

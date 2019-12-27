@@ -273,7 +273,7 @@ fn surrender_help(run_again: bool) {
     block(current_thread_info);
 }
 
-fn block(current_thread_info: *mut TCBInfo) {
+pub fn block(current_thread_info: *mut TCBInfo) {
     // Find something to switch to
     let mut next_thread: Box<dyn TCB> = match READY.lock().pop_front() {
         Some(mut tcb) => tcb,

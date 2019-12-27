@@ -1,5 +1,6 @@
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
+use crate::machine;
 
 pub struct SpinLock {
     taken: AtomicBool,
@@ -9,11 +10,17 @@ impl SpinLock {
     pub const fn new() -> SpinLock {
         SpinLock {taken: AtomicBool::new(false)}
     }
-    pub fn lock(&self) {
-        while self.taken.swap(true, Ordering::SeqCst) {}
+    pub fn lock(&self) -> bool {
+        let mut was = machine::disable();
+        while self.taken.swap(true, Ordering::SeqCst) {
+            machine::enable(was);
+            was = machine::disable();
+        }
+        was
     }
-    pub fn unlock(&self) {
+    pub fn unlock(&self, was: bool) {
         self.taken.swap(false, Ordering::SeqCst);
+        machine::enable(was);
     }
 }
 

@@ -8,6 +8,7 @@ use crate::smp;
 use spin::{Mutex, MutexGuard};
 use core::cell::UnsafeCell;
 use crate::spinlock::SpinLock;
+use crate::machine;
 
 /// A universal synchronization primitive. Blocks if count == 0.
 struct Semaphore {
@@ -28,7 +29,7 @@ impl Semaphore {
     }
     
     pub fn up(&mut self) {
-        self.control.lock();
+        let was = self.control.lock();
         let internals = self.internals.data.get();
         unsafe {
             match (*internals).blocked.pop_front() {
@@ -38,11 +39,11 @@ impl Semaphore {
                 None => (*internals).count += 1,
             }
         }
-        self.control.unlock();
+        self.control.unlock(was);
     }
 
     pub fn down(&mut self) {
-        let lock = self.control.lock();
+        let was = self.control.lock();
         let mut internals = unsafe {Box::from_raw(self.internals.data.get())};
         let count = unsafe {((*internals).count)};
         if (count == 0) {
@@ -63,16 +64,18 @@ impl Semaphore {
                 // Move internals ownership to lambda and release lock
                 internals.blocked.push_back(active);
                 let ptr = Box::into_raw(internals);
-                me.control.unlock();
+                me.control.unlock(true);
             };
             CLEANUP[smp::me()].lock().add_task(box add_to_blocked_queue);
+            machine::enable(was);
+            thread::block(current_state);
         }
         else {
             unsafe {
                 internals.count -= 1;
                 let ptr = Box::into_raw(internals);
             }
-            self.control.unlock();
+            self.control.unlock(was);
         }
     }
     
