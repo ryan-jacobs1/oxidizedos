@@ -13,7 +13,6 @@ mod vmm;
 mod smp;
 mod idt;
 mod thread;
-mod semaphore;
 mod spinlock;
 mod ismutex;
 mod timer;
@@ -35,7 +34,6 @@ use u8250::U8250;
 use config::mb_info;
 use config::CONFIG;
 use heap::{Heap, Block};
-//use heap::LockedHeap;
 use linked_list_allocator::LockedHeap;
 use thread::TCBImpl;
 use alloc::sync::Arc;
@@ -44,10 +42,7 @@ use alloc::sync::Arc;
 
 static HELLO: &[u8] = b"Off to the races!\n";
 
-/*
-#[global_allocator]
-static mut ALLOCATOR: LockedHeap = LockedHeap::new();
-*/
+
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
@@ -83,25 +78,10 @@ impl BoxedStack {
 }
 
 
-pub fn main() {}
 
 #[no_mangle]
 pub extern "C" fn _ap_start() -> ! {
-    unsafe {
-        println!("rsp is {:x}", machine::get_rsp());
-    }
-    vmm::init_ap();
-    //idt::init_ap();
-    smp::init_ap();
-    let me = smp::me();
-    println!("AP {} reached _ap_start", me);
-    CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
-    let num_cores = unsafe {CONFIG.total_procs};
-    while CORES_ACTIVE.load(Ordering::SeqCst) < num_cores {}
-    loop {
-        thread::stop();
-        //panic!("thread::stop returned");
-    }
+    loop {}
 }
 
 #[no_mangle]
@@ -119,13 +99,6 @@ pub extern "C" fn ap_pick_stack() -> usize {
 #[no_mangle]
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
-    println!("the kernel stack is at {:x}", unsafe {&STACK as *const Stack as usize});
-    let mut uart = U8250 {};
-    let hi = "Hello there!\n";
-    uart.write_string(hi);
-    write!(uart, "The numbers are {} and {}, {}\n", 42, 1.0 / 3.0, hi).unwrap();
-    println!("ooooweee, we're using println, {} {} {}", 42, 1.0 / 3.0, hi);
-    println!("Kernel End Address {:x}", end);
     config::init(mb_config);
     config::memory_map_init();
     vmm::init();
@@ -134,35 +107,9 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     smp::init_bsp();
     println!("smp::me(): {}", smp::me());
     unsafe {
-        //ALLOCATOR.init(0x200000, 0x800000);
         ALLOCATOR.lock().init(0x200000, 0x800000);
-    }    
-    thread::init();
-    timer::calibrate(1000);
-    let reset_eip = machine::ap_entry as *const () as u32;
-    println!("reset eip 0x{:x}", reset_eip);
-    println!("Booting up other cores...");
-    let num_cores = unsafe {CONFIG.total_procs};
-    for i in 1..num_cores {
-        // First allocate a kernel stack
-        // TODO: Put info about bootstrap stacks in a Bootstrap TCB
-        APSTACK.store(vmm::alloc() as usize, Ordering::SeqCst);
-        smp::ipi(i, 0x4500);
-        smp::ipi(i, 0x4600 | (reset_eip >> 12));
-        while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
-    println!("done with ipis");
-    //loop {}
-    let counter = Arc::new(AtomicU32::new(0));
-    for i in 0..100 {
-        let c = Arc::clone(&counter);
-        let x = TCBImpl::new(move || {
-            c.fetch_add(1, Ordering::SeqCst);
-        });
-        thread::schedule(box x);
-    }
-    while counter.load(Ordering::SeqCst) < 100 {}
-    println!("counter: {}", counter.load(Ordering::SeqCst));
+    thread::context_switch_test();
     loop {}
 }
 
