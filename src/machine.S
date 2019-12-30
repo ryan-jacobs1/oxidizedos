@@ -61,7 +61,6 @@ context_switch:
 	pop rbp
 	pop rbx
 
-	# TODO Clear leave me alone
 	ret
 
 
