@@ -10,6 +10,7 @@ use crate::config::CONFIG;
 use core::mem::MaybeUninit;
 use spin::Mutex;
 use core::borrow::BorrowMut;
+use core::marker::{Send, Sync};
 
 lazy_static! {
     pub static ref READY: Mutex<VecDeque<Box<dyn TCB>>> = spin::Mutex::new(VecDeque::new());
@@ -98,7 +99,7 @@ impl TCB for BootstrapTCB {
 
 
 #[repr(C)]
-pub struct TCBImpl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> {
+pub struct TCBImpl<T: 'static + Fn() + Send + Sync> {
     tcb_info: TCBInfo,
     stack: Box<[u64]>,
     work: Option<Box<T>>,
@@ -120,7 +121,7 @@ impl TCBInfo {
     }
 }
 
-impl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> TCBImpl<T> {
+impl<T: 'static + Fn() + Send + Sync> TCBImpl<T> {
     const NUM_CALLEE_SAVED: usize = 6;
 
     pub fn new(work: T) -> TCBImpl<T> {
