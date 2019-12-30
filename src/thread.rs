@@ -39,19 +39,12 @@ lazy_static! {
     };
 }
 
-
-/*
-pub fn get_active() -> &'static dyn TCB {
-    let was = machine::disable();
-    let active: &'static dyn TCB = ACTIVE.lock()[smp::me() as usize].borrow_mut();
-    machine::enable(was);
-    active
-}
-*/
+/// Swap the active thread with another thread. If swapped with None,
+/// then all preemption attempts will be aborted, until Some(tcb) is swapped in.
 pub fn swap_active(swap_to: Option<Box<dyn TCB>>) -> Option<Box<dyn TCB>> {
     let was = machine::disable();
     let mut result = swap_to;
-    core::mem::swap(&mut result, &mut ACTIVE.lock()[smp::me() as usize]);
+    core::mem::swap(&mut result, &mut ACTIVE.lock()[smp::me()]);
     machine::enable(was);
     result
 }
@@ -128,9 +121,9 @@ impl<T: 'static + Fn() + Send + Sync> TCBImpl<T> {
             stack_ptr_as_usize + (end_of_stack * core::mem::size_of::<usize>())
         );
         */
-        let x = stack_ptr_as_usize + ((index - 1) * core::mem::size_of::<usize>());
+        let stack_ptr_start = stack_ptr_as_usize + ((index - 1) * core::mem::size_of::<usize>());
         //println!("initial rsp 0x{:x}", x);
-        let tcb_info = TCBInfo::new(x);
+        let tcb_info = TCBInfo::new(stack_ptr_start);
         TCBImpl {
             tcb_info: tcb_info,
             stack: stack,
@@ -139,7 +132,7 @@ impl<T: 'static + Fn() + Send + Sync> TCBImpl<T> {
     }
 }
 
-impl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> TCB for TCBImpl<T> {
+impl<T: 'static + Fn() + Send + Sync> TCB for TCBImpl<T> {
     fn get_info(&mut self) -> *mut TCBInfo {
         &mut self.tcb_info as *mut TCBInfo
     }
@@ -276,7 +269,7 @@ pub fn block(current_thread_info: *mut TCBInfo) {
         // The next thread will now assert itself as the active thread
         swap_active(Some(next_thread));
     };
-    CLEANUP[smp::me() as usize].lock().add_task(Box::new(assert_as_active));
+    CLEANUP[smp::me()].lock().add_task(Box::new(assert_as_active));
     unsafe {
         machine::context_switch(current_thread_info, next_thread_info)
     }
@@ -285,7 +278,7 @@ pub fn block(current_thread_info: *mut TCBInfo) {
 
 fn cleanup() {
     let was = machine::disable();
-    let me = smp::me() as usize;
+    let me = smp::me();
     let mut cleanup_work = CLEANUP[me].lock();
     machine::enable(was);
     loop {

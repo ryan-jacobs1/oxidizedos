@@ -139,7 +139,6 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     }    
     thread::init();
     timer::calibrate(1000);
-    loop {}
     let reset_eip = machine::ap_entry as *const () as u32;
     println!("reset eip 0x{:x}", reset_eip);
     println!("Booting up other cores...");
@@ -153,7 +152,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
     println!("done with ipis");
-    loop {}
+    //loop {}
     let counter = Arc::new(AtomicU32::new(0));
     for i in 0..100 {
         let c = Arc::clone(&counter);
