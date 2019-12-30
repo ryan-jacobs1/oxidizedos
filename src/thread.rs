@@ -57,10 +57,8 @@ pub fn swap_active(swap_to: Option<Box<dyn TCB>>) -> Option<Box<dyn TCB>> {
 }
 
 
-pub trait TCB: core::marker::Send + core::marker::Sync {
+pub trait TCB: Send + Sync {
     fn get_info(&mut self) -> *mut TCBInfo;
-    fn set_leave_me_alone(&mut self, flag: bool);
-    fn get_leave_me_alone(&mut self) -> bool;
     fn get_work(&mut self) -> TaskHolder;
 }
 
@@ -84,14 +82,6 @@ impl TCB for BootstrapTCB {
         &mut self.tcb_info as *mut TCBInfo
     }
 
-    fn get_leave_me_alone(&mut self) -> bool {
-        self.tcb_info.leave_me_alone
-    }
-
-    fn set_leave_me_alone(&mut self, flag: bool) {
-        self.tcb_info.leave_me_alone = flag;
-    }
-
     fn get_work(&mut self) -> TaskHolder {
         panic!("BootstrapTCB has no work to do!");
     }
@@ -109,14 +99,12 @@ pub struct TCBImpl<T: 'static + Fn() + Send + Sync> {
 #[derive(Clone, Copy)]
 pub struct TCBInfo {
     stack_pointer: usize,
-    leave_me_alone: bool,
 }
 
 impl TCBInfo {
     pub fn new(stack_pointer: usize) -> TCBInfo {
         TCBInfo {
             stack_pointer: stack_pointer,
-            leave_me_alone: false,
         }
     }
 }
@@ -156,13 +144,6 @@ impl<T: 'static + Fn() + core::marker::Send + core::marker::Sync> TCB for TCBImp
         &mut self.tcb_info as *mut TCBInfo
     }
 
-    fn get_leave_me_alone(&mut self) -> bool {
-        self.tcb_info.leave_me_alone
-    }
-
-    fn set_leave_me_alone(&mut self, flag: bool) {
-        self.tcb_info.leave_me_alone = flag;
-    }
 
     fn get_work(&mut self) -> TaskHolder {
         let mut work = None;
