@@ -2,6 +2,7 @@ use crate::smp;
 use crate::machine;
 use crate::println;
 use crate::idt;
+use crate::thread;
 use core::sync::atomic::Ordering;
 
 pub static PIT_FREQ: u32 = 1193182;
@@ -84,4 +85,5 @@ pub extern "C" fn apit_handler() {
     unsafe {
         core::ptr::write_volatile(lapic.eoi_reg, 0);
     }
+    thread::surrender();
 }

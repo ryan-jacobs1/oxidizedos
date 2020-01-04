@@ -11,30 +11,31 @@ use core::mem::MaybeUninit;
 use spin::Mutex;
 use core::borrow::BorrowMut;
 use core::marker::{Send, Sync};
+use crate::ismutex::ISMutex;
 
 lazy_static! {
-    pub static ref READY: Mutex<VecDeque<Box<dyn TCB>>> = spin::Mutex::new(VecDeque::new());
+    pub static ref READY: ISMutex<VecDeque<Box<dyn TCB>>> = ISMutex::new(VecDeque::new());
 
     /// Invariant: When Active[i] == None, core i is guaranteed not to context switch due to a timer interrupt
-    pub static ref ACTIVE: Mutex<[Option<Box<dyn TCB>>; 16]> = {
+    pub static ref ACTIVE: ISMutex<[Option<Box<dyn TCB>>; 16]> = {
         let mut active: [MaybeUninit<Option<Box<dyn TCB>>>; 16] =
             unsafe { MaybeUninit::uninit().assume_init() };
         for i in 0..16 {
             active[i] = MaybeUninit::new(Some(Box::new(BootstrapTCB::new())));
         }
-        Mutex::new(unsafe { core::mem::transmute::<_, [Option<Box<dyn TCB>>; 16]>(active) })
+        ISMutex::new(unsafe { core::mem::transmute::<_, [Option<Box<dyn TCB>>; 16]>(active) })
     };
 
 }
 
 lazy_static! {
-    pub static ref CLEANUP: [Mutex<Box<TaskHolder>>; 16] = {
-        let mut cleanup: [MaybeUninit<Mutex<Box<TaskHolder>>>; 16] =
+    pub static ref CLEANUP: [ISMutex<Box<TaskHolder>>; 16] = {
+        let mut cleanup: [MaybeUninit<ISMutex<Box<TaskHolder>>>; 16] =
             unsafe { MaybeUninit::uninit().assume_init() };
         for i in 0..16 {
-            cleanup[i] = MaybeUninit::new(Mutex::new(box TaskHolder::new()));
+            cleanup[i] = MaybeUninit::new(ISMutex::new(box TaskHolder::new()));
         }
-        unsafe { core::mem::transmute::<_, [Mutex<Box<TaskHolder>>; 16]>(cleanup) }
+        unsafe { core::mem::transmute::<_, [ISMutex<Box<TaskHolder>>; 16]>(cleanup) }
     };
 }
 
@@ -289,7 +290,11 @@ fn cleanup() {
 }
 
 pub fn schedule(tcb: Box<dyn TCB>) {
-    READY.lock().push_back(tcb);
+    unsafe {
+        let was = machine::disable();
+        READY.lock().push_back(tcb);
+        machine::enable(was);
+    }
 }
 
 pub fn surrender_test() {

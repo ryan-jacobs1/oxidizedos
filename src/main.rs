@@ -140,15 +140,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     }    
     thread::init();
     timer::calibrate(1000);
-    //timer::init();
-    unsafe {
-        machine::sti();
-    }
-    loop {}
+    timer::init();
+    
     let reset_eip = machine::ap_entry as *const () as u32;
     println!("reset eip 0x{:x}", reset_eip);
     println!("Booting up other cores...");
     let num_cores = unsafe {CONFIG.total_procs};
+    
     for i in 1..num_cores {
         // First allocate a kernel stack
         // TODO: Put info about bootstrap stacks in a Bootstrap TCB
@@ -158,16 +156,23 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
     println!("done with ipis");
-    //loop {}
+    unsafe {
+        machine::sti();
+    }
+    println!("scheduling threads");
     let counter = Arc::new(AtomicU32::new(0));
-    for i in 0..100 {
+    for i in 0..10 {
+        println!("scheduling {}", i);
         let c = Arc::clone(&counter);
         let x = TCBImpl::new(move || {
+            println!("inc");
             c.fetch_add(1, Ordering::SeqCst);
         });
         thread::schedule(box x);
+        println!("scheduled {}", i);
     }
-    while counter.load(Ordering::SeqCst) < 100 {}
+    println!("scheduled all threads");
+    while counter.load(Ordering::SeqCst) < 10 {}
     println!("counter: {}", counter.load(Ordering::SeqCst));
     loop {}
 }
