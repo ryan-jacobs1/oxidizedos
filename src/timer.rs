@@ -1,9 +1,12 @@
 use crate::smp;
 use crate::machine;
 use crate::println;
+use crate::idt;
 use core::sync::atomic::Ordering;
 
 pub static PIT_FREQ: u32 = 1193182;
+pub static APIT_vector: usize = 40;
+pub static mut APIT_counter: Option<u32> = None;
 
 pub fn calibrate(hz: u32) {
     let lapic = unsafe {
@@ -15,7 +18,7 @@ pub fn calibrate(hz: u32) {
     let d = PIT_FREQ / 20;
     let mut initial = 0xffffffff;
     unsafe {
-        core::ptr::write_volatile(lapic.apit_lvl_timer, 0x00010000);
+        core::ptr::write_volatile(lapic.apit_lvt_timer, 0x00010000);
         core::ptr::write_volatile(lapic.apit_divide, 0x00010000);
         core::ptr::write_volatile(lapic.apit_initial_count, initial);
         machine::outb(0x61, 1);
@@ -41,6 +44,44 @@ pub fn calibrate(hz: u32) {
     }
     println!("diff {:x}", diff);
     println!("APIT running at {} hz", diff);
-    let apit_counter = diff / hz;
-    println!("apit counter: {}", apit_counter);
+    let counter = diff / hz;
+    println!("apit counter: {}", counter);
+    unsafe {
+        APIT_counter = Some(counter);
+    }
+    idt::interrupt(APIT_vector, machine::_apit_handler);
+}
+
+pub fn init() {
+    let lapic = unsafe {
+        match &smp::LAPIC {
+            Some(lapic) => lapic,
+            None => panic!("No LAPIC available")
+        }
+    };
+    let counter = unsafe {
+        match APIT_counter {
+            Some(counter) => counter,
+            None => panic!("APIT not initialized")
+        }
+    };
+    unsafe {
+        core::ptr::write_volatile(lapic.apit_divide, 0x0000000B);
+        core::ptr::write_volatile(lapic.apit_lvt_timer, (1 << 17) | (0 << 16) | (APIT_vector as u32));
+        core::ptr::write_volatile(lapic.apit_initial_count, counter);
+    }   
+}
+
+#[no_mangle]
+pub extern "C" fn apit_handler() {
+    println!("timer interrupt");
+    let lapic = unsafe {
+        match &smp::LAPIC {
+            Some(lapic) => lapic,
+            None => panic!("No LAPIC available")
+        }
+    };
+    unsafe {
+        core::ptr::write_volatile(lapic.eoi_reg, 0);
+    }
 }

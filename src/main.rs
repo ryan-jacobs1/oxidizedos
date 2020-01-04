@@ -91,8 +91,9 @@ pub extern "C" fn _ap_start() -> ! {
         println!("rsp is {:x}", machine::get_rsp());
     }
     vmm::init_ap();
-    //idt::init_ap();
+    idt::init_ap();
     smp::init_ap();
+    timer::init();
     let me = smp::me();
     println!("AP {} reached _ap_start", me);
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
@@ -139,6 +140,11 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     }    
     thread::init();
     timer::calibrate(1000);
+    //timer::init();
+    unsafe {
+        machine::sti();
+    }
+    loop {}
     let reset_eip = machine::ap_entry as *const () as u32;
     println!("reset eip 0x{:x}", reset_eip);
     println!("Booting up other cores...");
