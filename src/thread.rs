@@ -25,7 +25,6 @@ lazy_static! {
         Mutex::new(unsafe { core::mem::transmute::<_, [Option<Box<dyn TCB>>; 16]>(active) })
     };
 
-    pub static ref DEAD_THREADS : Mutex<VecDeque<Box<dyn TCB>>> = Mutex::new(VecDeque::new());
 }
 
 lazy_static! {
