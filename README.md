@@ -1,12 +1,9 @@
-# oxos: The Oxidized OS
+# OxidizedOS
 
 
 Dependencies:  
-stuff from phil opp's blog os  
-////  
 rust nightly (rustup override add nightly)  
-cargo xbuild (cargo install cargo-xbuild)  
-////  
+cargo xbuild (Thanks to Philipp Oppermann) (cargo install cargo-xbuild)  
 qemu  
 GRUB 2  
 xorriso  
