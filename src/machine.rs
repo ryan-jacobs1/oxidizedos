@@ -1,4 +1,5 @@
 use crate::thread::TCBInfo;
+use crate::println;
 
 extern "C" {
     pub fn outb(port: u32, val: u32);
@@ -10,6 +11,7 @@ extern "C" {
     pub fn wrmsr(val: u64, msr: u32);
     pub fn lidt(idt: u64);
     pub fn spurious_handler();
+    pub fn _apit_handler();
     pub fn software_int();
     pub fn ap_entry();
     pub fn context_switch(current: *mut TCBInfo, next: *mut TCBInfo);
@@ -23,8 +25,8 @@ extern "C" {
 /// The result of this function should be passed to its companion function, enable
 pub fn disable() -> bool {
     unsafe {
-        cli();
         let flags = get_flags();
+        cli();
         (flags & (1 << 9)) > 0
     }
 }
@@ -37,4 +39,9 @@ pub fn enable(was_enabled: bool) {
             sti();
         }
     }
+}
+
+pub fn are_interrupts_enabled() -> bool {
+    let flags = unsafe {get_flags()};
+    (flags & (1 << 9)) > 0
 }

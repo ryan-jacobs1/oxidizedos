@@ -75,7 +75,7 @@ pub fn init() {
 
 #[no_mangle]
 pub extern "C" fn apit_handler() {
-    println!("timer interrupt");
+    //println!("timer interrupt");
     let lapic = unsafe {
         match &smp::LAPIC {
             Some(lapic) => lapic,

@@ -161,7 +161,10 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     }
     println!("scheduling threads");
     let counter = Arc::new(AtomicU32::new(0));
-    for i in 0..10 {
+    for i in 0..100 {
+        let was = unsafe {
+            machine::disable()
+        };
         println!("scheduling {}", i);
         let c = Arc::clone(&counter);
         let x = TCBImpl::new(move || {
@@ -170,6 +173,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
         });
         thread::schedule(box x);
         println!("scheduled {}", i);
+        unsafe {machine::enable(was);}
     }
     println!("scheduled all threads");
     while counter.load(Ordering::SeqCst) < 10 {}
