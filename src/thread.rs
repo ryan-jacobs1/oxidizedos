@@ -155,7 +155,7 @@ impl<T: 'static + Fn() + Send + Sync> TCB for TCBImpl<T> {
 
 type Cleanup = FnOnce() + core::marker::Send + core::marker::Sync;
 
-/// Holds tasks to perform after context-switching
+/// Holds tasks to perform after context-switching.
 /// No mutual exclusion needed as this is a per-core data structure
 pub struct TaskHolder {
     tasks: VecDeque<Box<Cleanup>>,

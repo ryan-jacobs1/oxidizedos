@@ -4,6 +4,8 @@
 #![feature(panic_info_message)]
 #![feature(box_syntax)]
 #![feature(trait_alias)]
+#![feature(alloc, allocator_api)]
+#![feature(const_fn)]
 
 mod machine;
 mod u8250;
@@ -17,6 +19,7 @@ mod semaphore;
 mod spinlock;
 mod ismutex;
 mod timer;
+mod linked_list_allocator_2;
 
 #[macro_use]
 extern crate bitfield;
@@ -37,6 +40,7 @@ use config::CONFIG;
 use heap::{Heap, Block};
 //use heap::LockedHeap;
 use linked_list_allocator::LockedHeap;
+use linked_list_allocator_2::isheap::ISHeap;
 use thread::TCBImpl;
 use alloc::sync::Arc;
 
@@ -49,9 +53,13 @@ static HELLO: &[u8] = b"Off to the races!\n";
 static mut ALLOCATOR: LockedHeap = LockedHeap::new();
 */
 
+/*
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
+*/
 
+#[global_allocator]
+static ALLOCATOR: ISHeap = ISHeap::empty();
 
 static mut STACK: Stack = Stack::new();
 static APSTACK: AtomicUsize = AtomicUsize::new(0);
@@ -162,21 +170,15 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     println!("scheduling threads");
     let counter = Arc::new(AtomicU32::new(0));
     for i in 0..100 {
-        let was = unsafe {
-            machine::disable()
-        };
-        println!("scheduling {}", i);
+        
         let c = Arc::clone(&counter);
         let x = TCBImpl::new(move || {
-            println!("inc");
             c.fetch_add(1, Ordering::SeqCst);
         });
         thread::schedule(box x);
-        println!("scheduled {}", i);
-        unsafe {machine::enable(was);}
     }
     println!("scheduled all threads");
-    while counter.load(Ordering::SeqCst) < 10 {}
+    while counter.load(Ordering::SeqCst) < 100 {}
     println!("counter: {}", counter.load(Ordering::SeqCst));
     loop {}
 }
