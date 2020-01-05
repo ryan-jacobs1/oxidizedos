@@ -33,6 +33,31 @@ hlt:
 
 .intel_syntax noprefix
 
+	.macro SAVE_CALLER_REGS
+	push rdi
+	push rsi
+	push rdx
+	push rcx
+	push rax
+	push r8
+	push r9
+	push r10
+	push r11
+	.endm
+
+	.macro RESTORE_CALLER_REGS
+	pop r11
+	pop r10
+	pop r9
+	pop r8
+	pop rax
+	pop rcx
+	pop rdx
+	pop rsi
+	pop rdi
+	.endm
+
+
 # context_switch(current: TCB, next: TCB)
 .global context_switch
 context_switch:
@@ -97,6 +122,14 @@ lidt:
 spurious_handler:
 	.extern interrupt_test
 	call interrupt_test
+	iretq
+
+.global _apit_handler
+_apit_handler:
+	SAVE_CALLER_REGS
+	.extern apit_handler
+	call apit_handler
+	RESTORE_CALLER_REGS
 	iretq
 
 .global software_int
