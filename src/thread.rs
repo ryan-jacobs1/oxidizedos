@@ -31,7 +31,7 @@ pub trait TCB: Send + Sync {
     /* fn get_work(&mut self) -> ???; */
 }
 
-type Task = 'static + Fn() + Send + Sync;
+type Task = 'static + FnOnce() + Send + Sync;
 
 #[repr(C)]
 pub struct TCBImpl {
