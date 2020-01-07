@@ -31,21 +31,23 @@ pub trait TCB: Send + Sync {
     /* fn get_work(&mut self) -> ???; */
 }
 
+type Task = 'static + Fn() + Send + Sync;
+
 #[repr(C)]
-pub struct TCBImpl<T: 'static + Fn() + Send + Sync> {
+pub struct TCBImpl {
     tcb_info: TCBInfo,
     stack: Box<[u64]>,
-    work: Option<Box<T>>,
+    work: Option<Box<Task>>,
 }
 
-impl<T: 'static + Fn() + Send + Sync> TCBImpl<T> {
+impl TCBImpl {
     const NUM_CALLEE_SAVED: usize = 6;
 
-    pub fn new(work: T) -> TCBImpl<T> {
+    pub fn new(work: Box<Task>) -> TCBImpl {
         let mut stack: Box<[u64]> = box [0; 512];
         let end_of_stack = 511;
         stack[end_of_stack] = thread_entry_point as *const () as u64;
-        let index: usize = end_of_stack - TCBImpl::<T>::NUM_CALLEE_SAVED - 1;
+        let index: usize = end_of_stack - TCBImpl::NUM_CALLEE_SAVED - 1;
         stack[index] = 0; // Flags
         stack[index - 1] = 0; // CR2
         let stack_ptr = Box::into_raw(stack);
@@ -61,15 +63,15 @@ impl<T: 'static + Fn() + Send + Sync> TCBImpl<T> {
     }
 }
 
-impl<T: 'static + Fn() + Send + Sync> TCB for TCBImpl<T> {
+impl TCB for TCBImpl {
     fn get_info(&mut self) -> *mut TCBInfo {
         &mut self.tcb_info as *mut TCBInfo
     }
 }
 
 pub fn context_switch_test() {
-    let mut test1 = Box::new(TCBImpl::new(move || ()));
-    let mut test2 = Box::new(TCBImpl::new(move || ()));
+    let mut test1 = Box::new(TCBImpl::new(Box::new(move || ())));
+    let mut test2 = Box::new(TCBImpl::new(Box::new(move || ())));
     unsafe {
         machine::context_switch(test1.get_info(), test2.get_info());
     }
