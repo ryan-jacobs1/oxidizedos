@@ -12,48 +12,45 @@ use spin::Mutex;
 use core::borrow::BorrowMut;
 use core::marker::{Send, Sync};
 use crate::ismutex::ISMutex;
+use core::sync::atomic::{AtomicUsize, Ordering, AtomicU32};
+use alloc::sync::Arc;
 
 lazy_static! {
-    pub static ref READY: ISMutex<VecDeque<Box<dyn TCB>>> = ISMutex::new(VecDeque::new());
+    pub static ref READY: Mutex<VecDeque<Box<dyn TCB>>> = Mutex::new(VecDeque::new());
 
-    /// Invariant: When Active[i] == None, core i is guaranteed not to context switch due to a timer interrupt
-    pub static ref ACTIVE: [ISMutex<Option<Box<dyn TCB>>>; 16] = {
-        let mut active: [MaybeUninit<ISMutex<Option<Box<dyn TCB>>>>; 16] =
+    pub static ref ACTIVE: [Mutex<Option<Box<dyn TCB>>>; 16] = {
+        let mut active: [MaybeUninit<Mutex<Option<Box<dyn TCB>>>>; 16] =
             unsafe { MaybeUninit::uninit().assume_init() };
         for i in 0..16 {
-            active[i] = MaybeUninit::new(ISMutex::new(Some(Box::new(BootstrapTCB::new()))));
+            active[i] = MaybeUninit::new(Mutex::new(Some(Box::new(BootstrapTCB::new()))));
         }
-        unsafe { core::mem::transmute::<_, [ISMutex<Option<Box<dyn TCB>>>; 16]>(active) }
+        unsafe { core::mem::transmute::<_, [Mutex<Option<Box<dyn TCB>>>; 16]>(active) }
     };
 
 }
 
 lazy_static! {
-    pub static ref CLEANUP: [ISMutex<Box<TaskHolder>>; 16] = {
-        let mut cleanup: [MaybeUninit<ISMutex<Box<TaskHolder>>>; 16] =
+    pub static ref CLEANUP: [Mutex<Box<TaskHolder>>; 16] = {
+        let mut cleanup: [MaybeUninit<Mutex<Box<TaskHolder>>>; 16] =
             unsafe { MaybeUninit::uninit().assume_init() };
         for i in 0..16 {
-            cleanup[i] = MaybeUninit::new(ISMutex::new(box TaskHolder::new()));
+            cleanup[i] = MaybeUninit::new(Mutex::new(box TaskHolder::new()));
         }
-        unsafe { core::mem::transmute::<_, [ISMutex<Box<TaskHolder>>; 16]>(cleanup) }
+        unsafe { core::mem::transmute::<_, [Mutex<Box<TaskHolder>>; 16]>(cleanup) }
     };
 }
 
-/// Swap the active thread with another thread. If swapped with None,
-/// then all preemption attempts will be aborted, until Some(tcb) is swapped in.
+/// Swap the active thread with another thread
 pub fn swap_active(swap_to: Option<Box<dyn TCB>>) -> Option<Box<dyn TCB>> {
-    let was = machine::disable();
     let mut result = swap_to;
     core::mem::swap(&mut result, &mut ACTIVE[smp::me()].lock());
-    machine::enable(was);
     result
 }
 
 
 pub trait TCB: Send + Sync {
     fn get_info(&mut self) -> *mut TCBInfo;
-    fn get_work(&mut self) -> TaskHolder;
-    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync>;
+    fn get_work(&mut self) -> Box<'static + FnOnce() + Send + Sync>;
 }
 
 #[repr(C)]
@@ -76,11 +73,7 @@ impl TCB for BootstrapTCB {
         &mut self.tcb_info as *mut TCBInfo
     }
 
-    fn get_work(&mut self) -> TaskHolder {
-        panic!("BootstrapTCB has no work to do!");
-    }
-
-    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
+    fn get_work(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
         panic!("BootstrapTCB has no work to do!");
     }
 }
@@ -120,14 +113,7 @@ impl<T: 'static + FnOnce() + Send + Sync> TCBImpl<T> {
         let stack_ptr = Box::into_raw(stack);
         let stack_ptr_as_usize = stack_ptr as *mut u64 as usize;
         stack = unsafe {Box::from_raw(stack_ptr)};
-        /*
-        println!(
-            "loaded return at 0x{:x}",
-            stack_ptr_as_usize + (end_of_stack * core::mem::size_of::<usize>())
-        );
-        */
         let stack_ptr_start = stack_ptr_as_usize + ((index - 1) * core::mem::size_of::<usize>());
-        //println!("initial rsp 0x{:x}", x);
         let tcb_info = TCBInfo::new(stack_ptr_start);
         TCBImpl {
             tcb_info: tcb_info,
@@ -142,19 +128,7 @@ impl<T: 'static + FnOnce() + Send + Sync> TCB for TCBImpl<T> {
         &mut self.tcb_info as *mut TCBInfo
     }
 
-
-    fn get_work(&mut self) -> TaskHolder {
-        let mut work = None;
-        core::mem::swap(&mut work, &mut self.work);
-        let mut task_holder = TaskHolder::new();
-        match work {
-            Some(mut task) => task_holder.add_task(task),
-            None => panic!("TCBImpl had no work!")
-        }
-        task_holder
-    }
-
-    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
+    fn get_work(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
         let mut work = None;
         core::mem::swap(&mut work, &mut self.work);
         match work {
@@ -185,29 +159,21 @@ impl TaskHolder {
     pub fn get_task(&mut self) -> Option<Box<Cleanup>> {
         self.tasks.pop_front()
     }
-
-    pub fn run_task(&mut self) {
-        let task: Box<Cleanup> = match self.tasks.pop_front() {
-            Some(task) => task,
-            None => panic!("No task available!")
-        };
-        task();
-    }
 }
 
 #[no_mangle]
 pub extern "C" fn thread_entry_point() -> ! {
     cleanup();
     {
-    let was = machine::disable();
-    let mut active = match swap_active(None) {
-        Some(active) => active,
-        None => panic!("No thread available in thread entry point"),
-    };
-    let task = active.get_work_alt();
-    swap_active(Some(active));
-    machine::enable(was);
-    task();
+        let was = machine::disable();
+        let mut active = match swap_active(None) {
+            Some(active) => active,
+            None => panic!("No thread available in thread entry point"),
+        };
+        let task = active.get_work();
+        swap_active(Some(active));
+        machine::enable(was);
+        task();
     }
     stop();
     loop {}
@@ -229,22 +195,21 @@ pub fn stop() {
     surrender_help(false);
 }
 
-/// Yield is a reserved word in Rust, so we use a synonym
-fn surrender_help(run_again: bool) {
-    // If there's no active thread, return as we are currently surrendering
+pub fn surrender_help(run_again: bool) {
     let mut current_thread: Box<dyn TCB> = match swap_active(None) {
         Some(mut tcb) => {tcb},
-        None => {return}
+        None => {panic!("No active thread!")}
     };
-    // Don't need to disable interrupts, as we will run on this core until we context switch
-    let me = smp::me();
     let current_thread_info = current_thread.get_info();
+    let me = smp::me();
     if (run_again) {
+        // Have the next thread add us back to the ready queue
         let add_to_ready = move || {
             READY.lock().push_back(current_thread);
         };
         CLEANUP[me].lock().add_task(Box::new(add_to_ready));
     } else {
+        // Have the next thread free all the memory associated with the current TCB
         let drop_current = move || {
             let x = current_thread;
             drop(x);
@@ -264,8 +229,8 @@ pub fn block(current_thread_info: *mut TCBInfo) {
             let work = move || {
                 return
             };
-            let busy_work = Box::new(TCBImpl::new(work));
-            busy_work
+            let busy_work_box = Box::new(TCBImpl::new(work));
+            busy_work_box
         }
     };
     let next_thread_info = next_thread.get_info();
@@ -294,23 +259,26 @@ fn cleanup() {
 }
 
 pub fn schedule(tcb: Box<dyn TCB>) {
-    unsafe {
-        let was = machine::disable();
-        READY.lock().push_back(tcb);
-        machine::enable(was);
-    }
+    READY.lock().push_back(tcb);
 }
 
-pub fn surrender_test() {
-    let mut test1 = Box::new(TCBImpl::new(|| ()));
-    println!("{} in surrender after heap allocation", smp::me());
-    let mut test2 = Box::new(TCBImpl::new(|| ()));
-    println!("attempting to context switch");
-    let x = test2.get_info();
-    unsafe {
-        println!("switching to rsp {:x}", unsafe { *(x as *mut usize) });
+
+pub fn cooperative_scheduler_test() {
+    println!("running cooperative scheduler test");
+    let counter = Arc::new(AtomicU32::new(0));
+    for i in 0..10 {  
+        let c = Arc::clone(&counter);
+        let x = TCBImpl::new(move || {
+            for i in 0..10 {
+                c.fetch_add(1, Ordering::SeqCst);
+                surrender();
+            }
+        });
+        schedule(box x);
     }
-    unsafe {
-        machine::context_switch(test1.get_info(), test2.get_info());
+    println!("scheduled all threads");
+    while counter.load(Ordering::SeqCst) < 100 {
+        surrender();
     }
+    println!("counter: {}", counter.load(Ordering::SeqCst));
 }

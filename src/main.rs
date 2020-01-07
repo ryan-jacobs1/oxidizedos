@@ -48,18 +48,13 @@ use alloc::sync::Arc;
 
 static HELLO: &[u8] = b"Off to the races!\n";
 
-/*
-#[global_allocator]
-static mut ALLOCATOR: LockedHeap = LockedHeap::new();
-*/
 
-/*
+
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
-*/
 
-#[global_allocator]
-static ALLOCATOR: ISHeap = ISHeap::empty();
+
+
 
 static mut STACK: Stack = Stack::new();
 static APSTACK: AtomicUsize = AtomicUsize::new(0);
@@ -157,29 +152,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     
     for i in 1..num_cores {
         // First allocate a kernel stack
-        // TODO: Put info about bootstrap stacks in a Bootstrap TCB
         APSTACK.store(vmm::alloc() as usize, Ordering::SeqCst);
         smp::ipi(i, 0x4500);
         smp::ipi(i, 0x4600 | (reset_eip >> 12));
         while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
     println!("done with ipis");
-    unsafe {
-        machine::sti();
-    }
-    println!("scheduling threads");
-    let counter = Arc::new(AtomicU32::new(0));
-    for i in 0..100 {
-        
-        let c = Arc::clone(&counter);
-        let x = TCBImpl::new(move || {
-            c.fetch_add(1, Ordering::SeqCst);
-        });
-        thread::schedule(box x);
-    }
-    println!("scheduled all threads");
-    while counter.load(Ordering::SeqCst) < 100 {}
-    println!("counter: {}", counter.load(Ordering::SeqCst));
+    thread::cooperative_scheduler_test();
     loop {}
 }
 
