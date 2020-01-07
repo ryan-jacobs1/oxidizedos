@@ -17,13 +17,13 @@ lazy_static! {
     pub static ref READY: ISMutex<VecDeque<Box<dyn TCB>>> = ISMutex::new(VecDeque::new());
 
     /// Invariant: When Active[i] == None, core i is guaranteed not to context switch due to a timer interrupt
-    pub static ref ACTIVE: ISMutex<[Option<Box<dyn TCB>>; 16]> = {
-        let mut active: [MaybeUninit<Option<Box<dyn TCB>>>; 16] =
+    pub static ref ACTIVE: [ISMutex<Option<Box<dyn TCB>>>; 16] = {
+        let mut active: [MaybeUninit<ISMutex<Option<Box<dyn TCB>>>>; 16] =
             unsafe { MaybeUninit::uninit().assume_init() };
         for i in 0..16 {
-            active[i] = MaybeUninit::new(Some(Box::new(BootstrapTCB::new())));
+            active[i] = MaybeUninit::new(ISMutex::new(Some(Box::new(BootstrapTCB::new()))));
         }
-        ISMutex::new(unsafe { core::mem::transmute::<_, [Option<Box<dyn TCB>>; 16]>(active) })
+        unsafe { core::mem::transmute::<_, [ISMutex<Option<Box<dyn TCB>>>; 16]>(active) }
     };
 
 }
@@ -44,7 +44,7 @@ lazy_static! {
 pub fn swap_active(swap_to: Option<Box<dyn TCB>>) -> Option<Box<dyn TCB>> {
     let was = machine::disable();
     let mut result = swap_to;
-    core::mem::swap(&mut result, &mut ACTIVE.lock()[smp::me()]);
+    core::mem::swap(&mut result, &mut ACTIVE[smp::me()].lock());
     machine::enable(was);
     result
 }
