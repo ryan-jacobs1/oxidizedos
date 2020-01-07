@@ -52,8 +52,7 @@ pub fn swap_active(swap_to: Option<Box<dyn TCB>>) -> Option<Box<dyn TCB>> {
 
 pub trait TCB: Send + Sync {
     fn get_info(&mut self) -> *mut TCBInfo;
-    fn get_work(&mut self) -> TaskHolder;
-    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync>;
+    fn get_work(&mut self) -> Box<'static + FnOnce() + Send + Sync>;
 }
 
 #[repr(C)]
@@ -76,11 +75,7 @@ impl TCB for BootstrapTCB {
         &mut self.tcb_info as *mut TCBInfo
     }
 
-    fn get_work(&mut self) -> TaskHolder {
-        panic!("BootstrapTCB has no work to do!");
-    }
-
-    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
+    fn get_work(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
         panic!("BootstrapTCB has no work to do!");
     }
 }
@@ -142,19 +137,7 @@ impl<T: 'static + FnOnce() + Send + Sync> TCB for TCBImpl<T> {
         &mut self.tcb_info as *mut TCBInfo
     }
 
-
-    fn get_work(&mut self) -> TaskHolder {
-        let mut work = None;
-        core::mem::swap(&mut work, &mut self.work);
-        let mut task_holder = TaskHolder::new();
-        match work {
-            Some(mut task) => task_holder.add_task(task),
-            None => panic!("TCBImpl had no work!")
-        }
-        task_holder
-    }
-
-    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
+    fn get_work(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
         let mut work = None;
         core::mem::swap(&mut work, &mut self.work);
         match work {
@@ -185,29 +168,21 @@ impl TaskHolder {
     pub fn get_task(&mut self) -> Option<Box<Cleanup>> {
         self.tasks.pop_front()
     }
-
-    pub fn run_task(&mut self) {
-        let task: Box<Cleanup> = match self.tasks.pop_front() {
-            Some(task) => task,
-            None => panic!("No task available!")
-        };
-        task();
-    }
 }
 
 #[no_mangle]
 pub extern "C" fn thread_entry_point() -> ! {
     cleanup();
     {
-    let was = machine::disable();
-    let mut active = match swap_active(None) {
-        Some(active) => active,
-        None => panic!("No thread available in thread entry point"),
-    };
-    let task = active.get_work_alt();
-    swap_active(Some(active));
-    machine::enable(was);
-    task();
+        let was = machine::disable();
+        let mut active = match swap_active(None) {
+            Some(active) => active,
+            None => panic!("No thread available in thread entry point"),
+        };
+        let task = active.get_work();
+        swap_active(Some(active));
+        machine::enable(was);
+        task();
     }
     stop();
     loop {}
