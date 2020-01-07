@@ -53,6 +53,7 @@ pub fn swap_active(swap_to: Option<Box<dyn TCB>>) -> Option<Box<dyn TCB>> {
 pub trait TCB: Send + Sync {
     fn get_info(&mut self) -> *mut TCBInfo;
     fn get_work(&mut self) -> TaskHolder;
+    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync>;
 }
 
 #[repr(C)]
@@ -78,11 +79,15 @@ impl TCB for BootstrapTCB {
     fn get_work(&mut self) -> TaskHolder {
         panic!("BootstrapTCB has no work to do!");
     }
+
+    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
+        panic!("BootstrapTCB has no work to do!");
+    }
 }
 
 
 #[repr(C)]
-pub struct TCBImpl<T: 'static + Fn() + Send + Sync> {
+pub struct TCBImpl<T: 'static + FnOnce() + Send + Sync> {
     tcb_info: TCBInfo,
     stack: Box<[u64]>,
     work: Option<Box<T>>,
@@ -102,7 +107,7 @@ impl TCBInfo {
     }
 }
 
-impl<T: 'static + Fn() + Send + Sync> TCBImpl<T> {
+impl<T: 'static + FnOnce() + Send + Sync> TCBImpl<T> {
     const NUM_CALLEE_SAVED: usize = 6;
 
     pub fn new(work: T) -> TCBImpl<T> {
@@ -132,7 +137,7 @@ impl<T: 'static + Fn() + Send + Sync> TCBImpl<T> {
     }
 }
 
-impl<T: 'static + Fn() + Send + Sync> TCB for TCBImpl<T> {
+impl<T: 'static + FnOnce() + Send + Sync> TCB for TCBImpl<T> {
     fn get_info(&mut self) -> *mut TCBInfo {
         &mut self.tcb_info as *mut TCBInfo
     }
@@ -148,12 +153,21 @@ impl<T: 'static + Fn() + Send + Sync> TCB for TCBImpl<T> {
         }
         task_holder
     }
+
+    fn get_work_alt(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
+        let mut work = None;
+        core::mem::swap(&mut work, &mut self.work);
+        match work {
+            Some(task) => task,
+            None => panic!("TCBImpl had no work!")
+        }
+    }
 }
 
 
 
 
-type Cleanup = FnOnce() + core::marker::Send + core::marker::Sync;
+type Cleanup = FnOnce() + Send + Sync;
 
 /// Holds tasks to perform after context-switching.
 /// No mutual exclusion needed as this is a per-core data structure
@@ -181,24 +195,20 @@ impl TaskHolder {
     }
 }
 
-// TODO put the TaskHolder in the TCB so the closure is dropped
 #[no_mangle]
 pub extern "C" fn thread_entry_point() -> ! {
     cleanup();
-    //println!("initial rsp is 0x{:x}", unsafe {machine::get_rsp()});
     {
     let was = machine::disable();
     let mut active = match swap_active(None) {
         Some(active) => active,
         None => panic!("No thread available in thread entry point"),
     };
-    let task_holder = &mut active.get_work();
+    let task = active.get_work_alt();
     swap_active(Some(active));
     machine::enable(was);
-    //println!("running task");
-    task_holder.run_task();
+    task();
     }
-    //println!("thread finished work");
     stop();
     loop {}
 }
@@ -221,15 +231,13 @@ pub fn stop() {
 
 /// Yield is a reserved word in Rust, so we use a synonym
 fn surrender_help(run_again: bool) {
-    //println!("in surrender help");
     // If there's no active thread, return as we are currently surrendering
     let mut current_thread: Box<dyn TCB> = match swap_active(None) {
         Some(mut tcb) => {tcb},
         None => {return}
     };
     // Don't need to disable interrupts, as we will run on this core until we context switch
-    let me = smp::me() as usize;
-    //println!("me was {}", me);
+    let me = smp::me();
     let current_thread_info = current_thread.get_info();
     if (run_again) {
         let add_to_ready = move || {
@@ -237,10 +245,8 @@ fn surrender_help(run_again: bool) {
         };
         CLEANUP[me].lock().add_task(Box::new(add_to_ready));
     } else {
-        //println!("adding stop logic to cleanup");
         let drop_current = move || {
             let x = current_thread;
-            //println!("dropping the previous thread");
             drop(x);
         };
         CLEANUP[me].lock().add_task(Box::new(drop_current));
@@ -255,13 +261,11 @@ pub fn block(current_thread_info: *mut TCBInfo) {
         None => {
             // Implementation Note: Potentially a trade off to switch to something that switches back,
             // but most of the time, there should be something in the ready q
-            //println!("nothing to switch to");
-            let busy_work = move || {
-                //println!("busy work");
+            let work = move || {
                 return
             };
-            let busy_work_box = Box::new(TCBImpl::new(busy_work));
-            busy_work_box
+            let busy_work = Box::new(TCBImpl::new(work));
+            busy_work
         }
     };
     let next_thread_info = next_thread.get_info();
