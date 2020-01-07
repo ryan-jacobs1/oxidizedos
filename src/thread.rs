@@ -115,14 +115,7 @@ impl<T: 'static + FnOnce() + Send + Sync> TCBImpl<T> {
         let stack_ptr = Box::into_raw(stack);
         let stack_ptr_as_usize = stack_ptr as *mut u64 as usize;
         stack = unsafe {Box::from_raw(stack_ptr)};
-        /*
-        println!(
-            "loaded return at 0x{:x}",
-            stack_ptr_as_usize + (end_of_stack * core::mem::size_of::<usize>())
-        );
-        */
         let stack_ptr_start = stack_ptr_as_usize + ((index - 1) * core::mem::size_of::<usize>());
-        //println!("initial rsp 0x{:x}", x);
         let tcb_info = TCBInfo::new(stack_ptr_start);
         TCBImpl {
             tcb_info: tcb_info,
