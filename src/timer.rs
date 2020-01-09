@@ -10,6 +10,7 @@ pub static APIT_vector: usize = 40;
 pub static mut APIT_counter: Option<u32> = None;
 
 pub fn calibrate(hz: u32) {
+    println!("Calibrating APIT...");
     let lapic = unsafe {
         match &smp::LAPIC {
             Some(lapic) => lapic,

@@ -133,7 +133,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let hi = "Hello there!\n";
     uart.write_string(hi);
     write!(uart, "The numbers are {} and {}, {}\n", 42, 1.0 / 3.0, hi).unwrap();
-    println!("ooooweee, we're using println, {} {} {}", 42, 1.0 / 3.0, hi);
+    //println!("ooooweee, we're using println, {} {} {}", 42, 1.0 / 3.0, hi);
     println!("Kernel End Address {:x}", end);
     config::init(mb_config);
     config::memory_map_init();
@@ -172,7 +172,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     for i in 0..100 {
         
         let c = Arc::clone(&counter);
-        let x = TCBImpl::new(move || {
+        let x = TCBImpl::new(box move || {
             c.fetch_add(1, Ordering::SeqCst);
         });
         thread::schedule(box x);
