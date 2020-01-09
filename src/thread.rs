@@ -78,12 +78,13 @@ impl TCB for BootstrapTCB {
     }
 }
 
+type Task = 'static + FnOnce() + Send + Sync;
 
 #[repr(C)]
-pub struct TCBImpl<T: 'static + FnOnce() + Send + Sync> {
+pub struct TCBImpl {
     tcb_info: TCBInfo,
     stack: Box<[u64]>,
-    work: Option<Box<T>>,
+    work: Option<Box<Task>>,
 }
 
 #[repr(C)]
@@ -100,14 +101,14 @@ impl TCBInfo {
     }
 }
 
-impl<T: 'static + FnOnce() + Send + Sync> TCBImpl<T> {
+impl TCBImpl {
     const NUM_CALLEE_SAVED: usize = 6;
 
-    pub fn new(work: T) -> TCBImpl<T> {
+    pub fn new(work: Box<Task>) -> TCBImpl {
         let mut stack: Box<[u64]> = box [0; 512];
         let end_of_stack = 511;
         stack[end_of_stack] = thread_entry_point as *const () as u64;
-        let index: usize = end_of_stack - TCBImpl::<T>::NUM_CALLEE_SAVED - 1;
+        let index: usize = end_of_stack - TCBImpl::NUM_CALLEE_SAVED - 1;
         stack[index] = 0; // Flags
         stack[index - 1] = 0; // CR2
         let stack_ptr = Box::into_raw(stack);
@@ -118,17 +119,17 @@ impl<T: 'static + FnOnce() + Send + Sync> TCBImpl<T> {
         TCBImpl {
             tcb_info: tcb_info,
             stack: stack,
-            work: Some(Box::new(work)),
+            work: Some(work),
         }
     }
 }
 
-impl<T: 'static + FnOnce() + Send + Sync> TCB for TCBImpl<T> {
+impl TCB for TCBImpl {
     fn get_info(&mut self) -> *mut TCBInfo {
         &mut self.tcb_info as *mut TCBInfo
     }
 
-    fn get_work(&mut self) -> Box<'static + FnOnce() + Send + Sync> {
+    fn get_work(&mut self) -> Box<Task> {
         let mut work = None;
         core::mem::swap(&mut work, &mut self.work);
         match work {
@@ -229,8 +230,8 @@ pub fn block(current_thread_info: *mut TCBInfo) {
             let work = move || {
                 return
             };
-            let busy_work_box = Box::new(TCBImpl::new(work));
-            busy_work_box
+            let busy_work = Box::new(TCBImpl::new(Box::new(work)));
+            busy_work
         }
     };
     let next_thread_info = next_thread.get_info();
@@ -268,8 +269,8 @@ pub fn cooperative_scheduler_test() {
     let counter = Arc::new(AtomicU32::new(0));
     for i in 0..10 {  
         let c = Arc::clone(&counter);
-        let x = TCBImpl::new(move || {
-            for i in 0..10 {
+        let x = TCBImpl::new(box move || {
+            for j in 0..10 {
                 c.fetch_add(1, Ordering::SeqCst);
                 surrender();
             }
