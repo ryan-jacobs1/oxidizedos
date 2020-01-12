@@ -20,6 +20,7 @@ mod spinlock;
 mod ismutex;
 mod timer;
 mod linked_list_allocator_2;
+mod pci;
 
 #[macro_use]
 extern crate bitfield;
@@ -43,6 +44,7 @@ use linked_list_allocator::LockedHeap;
 use linked_list_allocator_2::isheap::ISHeap;
 use thread::TCBImpl;
 use alloc::sync::Arc;
+use pci;
 
 
 
@@ -102,10 +104,12 @@ pub extern "C" fn _ap_start() -> ! {
     idt::init_ap();
     smp::init_ap();
     timer::init();
+    pci::checkAllBuses();
     let me = smp::me();
     println!("AP {} reached _ap_start", me);
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
     let num_cores = unsafe {CONFIG.total_procs};
+
     while CORES_ACTIVE.load(Ordering::SeqCst) < num_cores {}
     loop {
         thread::stop();
