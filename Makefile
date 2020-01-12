@@ -3,13 +3,13 @@ all: iso build
 .phony: iso build
 
 build:
-	make -C src
+	mkdir BUILD_FILES
 	cargo xbuild
 
 clean:
-	make -C src clean
 	cargo clean
 	rm -rf isodir
+	rm -rf BUILD_FILES/*.o
 	rm -f oxos.iso
 
 iso: build
