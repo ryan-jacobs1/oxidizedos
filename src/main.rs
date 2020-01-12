@@ -44,7 +44,6 @@ use linked_list_allocator::LockedHeap;
 use linked_list_allocator_2::isheap::ISHeap;
 use thread::TCBImpl;
 use alloc::sync::Arc;
-use pci;
 
 
 
@@ -104,7 +103,6 @@ pub extern "C" fn _ap_start() -> ! {
     idt::init_ap();
     smp::init_ap();
     timer::init();
-    pci::checkAllBuses();
     let me = smp::me();
     println!("AP {} reached _ap_start", me);
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
@@ -146,6 +144,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
     println!("smp::me(): {}", smp::me());
+    pci::checkAllBuses();
     unsafe {
         //ALLOCATOR.init(0x200000, 0x800000);
         ALLOCATOR.lock().init(0x200000, 0x800000);

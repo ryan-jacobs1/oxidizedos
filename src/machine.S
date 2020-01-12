@@ -37,14 +37,14 @@ inw:
 outl:
 	mov %rdi, %rdx;
 	mov %rsi, %rax;
-	outl %eax, %edx
+	outl %eax, %dx
 	ret
 
 	# int inl(int port)
 	.global inl
 inl:
 	mov %rdi, %rdx;
-	inl %edx, %eax;
+	inl %dx, %eax;
 	ret
 
 	# hlt()

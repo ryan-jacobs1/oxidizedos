@@ -4,10 +4,10 @@ use crate::machine;
 /*** FOR HELP UNDERSTANDING THE PCI GO TO wiki.osdev.org/PCI ***/
 
 /* I/O port for PCI configuration */
-pub static const u32 CONFIG_ADDRESS = 0xCF8;
+pub static CONFIG_ADDRESS: u32 = 0xCF8;
 
 /* I/O port for accessing CONFIG_DATA register */
-pub static const u32 CONFIG_DATA = 0xCFC;
+pub static CONFIG_DATA: u32 = 0xCFC;
 
 #[derive(Default)]
 pub struct PCIDeviceHeader {
@@ -30,7 +30,7 @@ pub struct PCIDeviceHeader {
 
 impl PCIDeviceHeader {
     fn new(bus: u8, slot: u8) -> PCIDeviceHeader {
-        let mut header = PCIDeviceInfo::default();
+        let mut header = PCIDeviceHeader::default();
         header.bus = bus;
         header.slot = slot;
         header.readInHeader();
@@ -70,10 +70,11 @@ impl PCIDeviceHeader {
 		println!("Latency Timer  :   {}", self.latencyTimer);
 		println!("Header Type    : 0x{}", self.headerType);
 		println!("BIST           : 0x{}", self.BIST);
-		if self.hasMultipleFuncs()
+		if self.hasMultipleFuncs() {
             println!("This device has multiple functions.");
-		else
+        } else {
             println!("This device has only one function.");
+        }
     }
 
     fn hasMultipleFuncs(&self) -> bool {
@@ -112,7 +113,7 @@ pub struct PCI00DeviceInfo {
 impl PCI00DeviceInfo {
     fn new (bus: u8, slot: u8) -> PCI00DeviceInfo {
         let header = PCIDeviceHeader::new(bus, slot);
-        let mut device = PCI00DeviceInfo::deafult();
+        let mut device = PCI00DeviceInfo::default();
         device.header = header;
         device.readInDevice();
         
@@ -125,15 +126,15 @@ impl PCI00DeviceInfo {
         let slot = self.header.slot;
 
         for i in 0..6 {
-            self.baseAddr[i] = configRead32(bus, slot, 0, 16 + 4 * i);
+            self.baseAddr[i] = configRead32(bus, slot, 0, (16 + 4 * i) as u8);
         }
 		self.cardBusCISPtr = configRead32(bus, slot, 0, 0x28);
 		self.subsystemVendorID = configRead16(bus, slot, 0, 0x2c);
 		self.subsystemID = configRead16(bus, slot, 0, 0x2e);
-		self.expansionROMBaseAddr = configRead16(bus, slot, 0, 0x30);
+		self.expansionROMBaseAddr = configRead32(bus, slot, 0, 0x30);
 		self.capabilitiesPtr = configRead8(bus, slot, 0, 0x34);
 		self.reserved1 = configRead8(bus, slot, 0, 0x35);
-		self.reserved2 = configRead8(bus, slot, 0, 0x36);
+		self.reserved2 = configRead16(bus, slot, 0, 0x36);
 		self.reserved3 = configRead32(bus, slot, 0, 0x38);
 		self.interruptLine = configRead8(bus, slot, 0, 0x3c);
 		self.interruptPIN = configRead8(bus, slot, 0, 0x3d);
@@ -141,28 +142,28 @@ impl PCI00DeviceInfo {
 		self.maxLatency = configRead8(bus, slot, 0, 0x3f);
     }
 
-    fn getAddressSpaceSize(&self, bar: u32) -> u32 {
+    fn getAddressSpaceSize(&self, barNum: usize) -> u32 {
         let mut sz = 0;
 
 		// if invalid BAR, return sz 0
-		if self.baseAddr[self.barNum] == 0 {
+		if self.baseAddr[barNum] == 0 {
             return 0;
         }
 		// write all 1s to the BAR
-		configWrite32(self.header.bus, self.header.slot, 0, 16 + 4 * self.barNum, 0xFFFFFFFF);
-		sz = configRead32(self.header.bus, self.header.slot, 0, 16 + 4 * self.barNum);
+		configWrite32(self.header.bus, self.header.slot, 0, (16 + 4 * barNum) as u8, 0xFFFFFFFF);
+		sz = configRead32(self.header.bus, self.header.slot, 0, (16 + 4 * barNum) as u8);
 		// mask info bits
-		if (self.baseAddr[self.barNum] & 1) == 1 {
-            sz = (sz & 0xFFFFFFFC);
+		if (self.baseAddr[barNum] & 1) == 1 {
+            sz &= 0xFFFFFFFC;
         } else {
-            sz = (sz & 0xFFFFFFF0);
+            sz &= 0xFFFFFFF0;
         }
 
-		sz = ~sz;
-		sz++;
+		sz = !sz;
+		sz += 1;
 
 		// write back original BAR value
-		configWrite32(self.header.bus, self.header.slot, 0, 16 + 4 * self.barNum, self.baseAddr[self.barNum]);
+		configWrite32(self.header.bus, self.header.slot, 0, (16 + 4 * barNum) as u8, self.baseAddr[barNum]);
 
 		sz
     }
@@ -251,9 +252,10 @@ void initIrq(void);
 */
 
 fn configRead8(bus: u8, slot: u8, func: u8, offset: u8) -> u8 {
-    let lbus: u32 = bus;
-    let lslot: u32 = slot;
-    let lfunc: u32 = func;
+    let lbus: u32 = bus as u32;
+    let lslot: u32 = slot as u32;
+    let lfunc: u32 = func as u32;
+    let offset: u32 = offset as u32;
 
     // address configuration:
     //             31        30-24         23-16         15-11          10-8           7-0 (but bottom two bits always 0b00)
@@ -261,18 +263,19 @@ fn configRead8(bus: u8, slot: u8, func: u8, offset: u8) -> u8 {
     let address: u32 = (1 << 31) | (lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xff);
     let tmp: u8 = unsafe {
         // set address we want to read from
-        machine::outportl(CONFIG_ADDRESS, address);
+        machine::outl(CONFIG_ADDRESS, address);
         // read data now that address is specified
-        machine::inportb(CONFIG_DATA)
-    }
+        machine::inb(CONFIG_DATA)
+    };
 
     tmp
 }
 fn configWrite8(bus: u8, slot: u8, func: u8, offset: u8, data: u8) {
-    let lbus: u32 = bus;
-    let lslot: u32 = slot;
-    let lfunc: u32 = func;
-    let to_write: u8 = data;
+    let lbus: u32 = bus as u32;
+    let lslot: u32 = slot as u32;
+    let lfunc: u32 = func as u32;
+    let offset: u32 = offset as u32;
+    let to_write: u32 = data as u32;
 
     // address configuration:
     //             31        30-24         23-16         15-11          10-8           7-0 (but bottom two bits always 0b00)
@@ -280,16 +283,17 @@ fn configWrite8(bus: u8, slot: u8, func: u8, offset: u8, data: u8) {
     let address: u32 = (1 << 31) | (lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xff);
     unsafe {
         // set address we want to read from
-        machine::outportl(CONFIG_ADDRESS, address);
+        machine::outl(CONFIG_ADDRESS, address);
         // write data now that address is specified
-        machine::outportb(CONFIG_DATA, to_write);
+        machine::outb(CONFIG_DATA, to_write);
     }
 }
 
 fn configRead16(bus: u8, slot: u8, func: u8, offset: u8) -> u16 {
-    let lbus: u32 = bus;
-    let lslot: u32 = slot;
-    let lfunc: u32 = func;
+    let lbus: u32 = bus as u32;
+    let lslot: u32 = slot as u32;
+    let lfunc: u32 = func as u32;
+    let offset: u32 = offset as u32;
 
     // address configuration:
     //           31        30-24         23-16         15-11          10-8           7-0 (but bottom two bits always 0b00)
@@ -297,18 +301,19 @@ fn configRead16(bus: u8, slot: u8, func: u8, offset: u8) -> u16 {
     let address: u32 = (1 << 31) | (lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xfc);
     let tmp: u16 = unsafe {
         // set address we want to read from
-        machine::outportl(CONFIG_ADDRESS, address);
+        machine::outl(CONFIG_ADDRESS, address);
         // read data now that address is specified
-        (machine::inportl(CONFIG_DATA) >> ((offset & 2) * 8)) & 0xFFFF
-    }
+        ((machine::inl(CONFIG_DATA) >> ((offset & 2) * 8)) & 0xFFFF) as u16
+    };
 
     tmp
 }
 fn configWrite16(bus: u8, slot: u8, func: u8, offset: u8, data: u16) {
-    let lbus: u32 = bus;
-    let lslot: u32 = slot;
-    let lfunc: u32 = func;
-    let mut to_write: u32 = data;
+    let lbus: u32 = bus as u32;
+    let lslot: u32 = slot as u32;
+    let lfunc: u32 = func as u32;
+    let offset: u32 = offset as u32;
+    let mut to_write: u32 = data as u32;
 
     // address configuration:
     //           31        30-24         23-16         15-11          10-8           7-0 (but bottom two bits always 0b00)
@@ -317,25 +322,26 @@ fn configWrite16(bus: u8, slot: u8, func: u8, offset: u8, data: u16) {
 
     // if writing to upper half of a word, get lower half of word and build toWrite
     if (offset & 2) > 0 {
-        to_write = toWrite << 16;
-        to_write |= configRead16(bus, slot, func, offset & 0xfc);
+        to_write <<= 16;
+        to_write |= configRead16(bus, slot, func, (offset & 0xfc) as u8) as u32;
     }
     // if writing to lower half of a word, get upper half of word and build toWrite
     else {
-        to_write |= ((configRead16(bus, slot, func, (offset & 0xfc) + 2) as u32) << 16);
+        to_write |= ((configRead16(bus, slot, func, ((offset & 0xfc) + 2) as u8) as u32) << 16) as u32;
     }
     unsafe {
         // set address we want to write to
-        machine::outportl(CONFIG_ADDRESS, address);
+        machine::outl(CONFIG_ADDRESS, address);
         // write data now that address is specified
-        machine::outportl(CONFIG_DATA, to_write);
+        machine::outl(CONFIG_DATA, to_write);
     }
 }
 
 fn configRead32(bus: u8, slot: u8, func: u8, offset: u8) -> u32 {
-    let lbus: u32 = bus;
-    let lslot: u32 = slot;
-    let lfunc: u32 = func;
+    let lbus: u32 = bus as u32;
+    let lslot: u32 = slot as u32;
+    let lfunc: u32 = func as u32;
+    let offset: u32 = offset as u32;
 
     // address configuration:
     //           31        30-24         23-16         15-11          10-8           7-0 (but bottom two bits always 0b00)
@@ -343,17 +349,18 @@ fn configRead32(bus: u8, slot: u8, func: u8, offset: u8) -> u32 {
     let address: u32 = (1 << 31) | (lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xfc);
     let tmp: u32 = unsafe {
         // set address we want to read from
-        machine::outportl(CONFIG_ADDRESS, address);
+        machine::outl(CONFIG_ADDRESS, address);
         // read data now that address is specified
-        machine::inportl(CONFIG_DATA)
-    }
+        machine::inl(CONFIG_DATA)
+    };
 
     tmp
 }
 fn configWrite32(bus: u8, slot: u8, func: u8, offset: u8, data: u32) {
-    let lbus: u32 = bus;
-    let lslot: u32 = slot;
-    let lfunc: u32 = func;
+    let lbus: u32 = bus as u32;
+    let lslot: u32 = slot as u32;
+    let lfunc: u32 = func as u32;
+    let offset: u32 = offset as u32;
     let to_write: u32 = data;
 
     // address configuration:
@@ -362,9 +369,9 @@ fn configWrite32(bus: u8, slot: u8, func: u8, offset: u8, data: u32) {
     let address: u32 = (1 << 31) | (lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xfc);
     unsafe {
         // set address we want to read from
-        machine::outportl(CONFIG_ADDRESS, address);
+        machine::outl(CONFIG_ADDRESS, address);
         // write data now that address is specified
-        machine::outportl(CONFIG_DATA, to_write);
+        machine::outl(CONFIG_DATA, to_write);
     }
 }
 
@@ -378,7 +385,7 @@ fn checkVendor(bus: u8, slot: u8) -> u16 {
 
         println!("The bus {} has slot {} with device {} and vendor {}", bus,
                slot, device, vendor);
-        let tmp: Option<PCI00DeviceInfo> = get00Device(bus, slot);
+        let tmp: Option<PCI00DeviceInfo> = get00DeviceInfo(bus, slot);
         if let Some(dev) = tmp {
             dev.printHeader();
             println!("\n");
@@ -388,10 +395,10 @@ fn checkVendor(bus: u8, slot: u8) -> u16 {
     vendor
 }
 
-fn checkAllBuses() {
-    for bus: u16 in 0..256 {
-        for slot: u8 in 0..32 {
-            checkVendor(bus as u8, slot);
+pub fn checkAllBuses() {
+    for bus in 0..256 {
+        for slot in 0..32 {
+            checkVendor(bus as u8, slot as u8);
         }
     }
 }
@@ -405,10 +412,11 @@ void loadAllPCI00Devices();
 fn get00DeviceInfo(bus: u8, slot: u8) -> Option<PCI00DeviceInfo> {
     let headerType: u8 = (configRead16(bus, slot, 0, 14) & 0xFF) as u8;
     // if headerType00, return the more specific object
-    if ((headerType & 3) == 0)
+    if (headerType & 3) == 0 {
         Some(PCI00DeviceInfo::new(bus, slot))
-    else
+    } else {
         None
+    }
 }
 
 /*
