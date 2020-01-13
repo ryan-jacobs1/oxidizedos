@@ -5,3 +5,4 @@ isodir/boot/oxos.bin
 isodir/boot/grub/grub.cfg
 src/boot.o
 src/longmodeNasm.o
+BUILD_FILES
