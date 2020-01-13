@@ -20,6 +20,7 @@ mod spinlock;
 mod ismutex;
 mod timer;
 mod linked_list_allocator_2;
+mod pci;
 
 #[macro_use]
 extern crate bitfield;
@@ -68,15 +69,15 @@ static CORES_ACTIVE: AtomicU32 = AtomicU32::new(0);
 #[repr(C, align(4096))]
 #[derive(Copy, Clone)]
 pub struct Stack {
-    pub stack: [u64; 512],
+    pub stack: [u64; 1024],
 }
 
 impl Stack {
     pub const fn new() -> Stack {
-        Stack {stack: [0; 512]}
+        Stack {stack: [0; 1024]}
     }
     pub fn boxed_new() -> Box<Stack> {
-        box Stack {stack: [0; 512]}
+        box Stack {stack: [0; 1024]}
     }
 }
 
@@ -106,6 +107,7 @@ pub extern "C" fn _ap_start() -> ! {
     println!("AP {} reached _ap_start", me);
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
     let num_cores = unsafe {CONFIG.total_procs};
+
     while CORES_ACTIVE.load(Ordering::SeqCst) < num_cores {}
     loop {
         thread::stop();
@@ -115,7 +117,9 @@ pub extern "C" fn _ap_start() -> ! {
 
 #[no_mangle]
 pub extern "C" fn pick_stack() -> usize {
-    unsafe {(&STACK as *const Stack as usize) + (4096 - 8)}
+    let stack = unsafe {(&STACK as *const Stack as usize) + ((4096 * 2) - 8)};
+    println!("called pick_stack {:x}", stack);
+    stack
 }
 
 #[no_mangle]
@@ -129,6 +133,9 @@ pub extern "C" fn ap_pick_stack() -> usize {
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
     println!("the kernel stack is at {:x}", unsafe {&STACK as *const Stack as usize});
+    println!("mb_config at {:x}", mb_config as *const mb_info as usize);
+    //let rsp = unsafe{machine::get_rsp()};
+    //println!("rsp at {:x}", rsp);
     let mut uart = U8250 {};
     let hi = "Hello there!\n";
     uart.write_string(hi);
@@ -142,10 +149,11 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
     println!("smp::me(): {}", smp::me());
+    pci::check_all_buses();
     unsafe {
         //ALLOCATOR.init(0x200000, 0x800000);
         ALLOCATOR.lock().init(0x200000, 0x800000);
-    }    
+    }
     thread::init();
     timer::calibrate(1000);
     timer::init();

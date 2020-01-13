@@ -24,6 +24,29 @@ outw:
 	out %eax, %dx
 	ret
 
+	# int inw(int port)
+	.global inw
+inw:
+	mov %rdi, %rdx;
+	in %dx, %ax;
+	and $0xffff, %rax
+	ret
+
+	# outl(int port, int val)
+	.global outl
+outl:
+	mov %rdi, %rdx;
+	mov %rsi, %rax;
+	outl %eax, %dx
+	ret
+
+	# int inl(int port)
+	.global inl
+inl:
+	mov %rdi, %rdx;
+	inl %dx, %eax;
+	ret
+
 	# hlt()
 	.global hlt
 hlt:

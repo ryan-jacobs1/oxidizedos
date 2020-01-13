@@ -16,7 +16,7 @@ appm:
     lgdt [GDT64.Pointer]
     extern stack_top
     mov esp, stack_top
-    mov eax, 0x1000
+    mov eax, pml4
     mov cr3, eax
 
     ; Enable long mode
@@ -76,17 +76,19 @@ trampoline_gdtDesc:
 section .text
 global longmode
 longmode:
-    mov edi, 0x1000    ; Set the destination index to 0x1000.
+    extern pml4
+    extern pdpt
+    mov edi, pml4    ; Set the destination index to 0x1000.
     mov cr3, edi       ; Set control register 3 to the destination index.
     xor eax, eax       ; Nullify the A-register.
     mov ecx, 4096      ; Set the C-register to 4096.
     rep stosd          ; Clear the memory.
     mov edi, cr3       ; Set the destination index to control register 3.
 
-    mov DWORD [edi], 0x2003      ; Set the uint32_t at the destination index to 0x2003.
+    mov DWORD [edi], (pdpt + 0x3)      ; Set the uint32_t at the destination index to 0x2003.
  
     ; Identity map the entire 32 bit address space using huge pages
-    mov edi, 0x2000
+    mov edi, pdpt
     mov DWORD [edi], (0x3 | (1 << 7))
     mov DWORD [edi + 4], 0
     mov DWORD [edi + 8], (0x3 | (1 << 7))
@@ -159,12 +161,12 @@ Realm64:
     mov rax, 0x1F201F201F201F20   ; Set the A-register to 0x1F201F201F201F20.
     mov ecx, 500                  ; Set the C-register to 500.
     rep stosq                     ; Clear the screen.
-    extern multiboot_config
-    mov edi, [multiboot_config]
-    add edi, 8
     ; Switch to a new stack
     extern pick_stack
     call pick_stack
+    extern multiboot_config
+    mov edi, [multiboot_config]
+    add edi, 8
     mov rsp, rax
     extern KERNEL_END
     mov rsi, KERNEL_END

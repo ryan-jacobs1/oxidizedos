@@ -33,6 +33,15 @@ CHECKSUM equ -(MAGIC + FLAGS)   ; checksum of above, to prove we are multiboot
 	multiboot_config:
 	resb 4
 
+section .bss
+alignb 4096
+	global pml4
+	pml4:
+	resb 4096
+	global pdpt
+	pdpt:
+	resb 4096
+
 ; The linker script specifies _start as the entry point to the kernel and the
 ; bootloader will jump to this position once the kernel has been loaded. It
 ; doesn't make sense to return from this function as the bootloader is gone.
