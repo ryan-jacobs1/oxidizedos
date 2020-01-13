@@ -69,15 +69,15 @@ static CORES_ACTIVE: AtomicU32 = AtomicU32::new(0);
 #[repr(C, align(4096))]
 #[derive(Copy, Clone)]
 pub struct Stack {
-    pub stack: [u64; 512],
+    pub stack: [u64; 1024],
 }
 
 impl Stack {
     pub const fn new() -> Stack {
-        Stack {stack: [0; 512]}
+        Stack {stack: [0; 1024]}
     }
     pub fn boxed_new() -> Box<Stack> {
-        box Stack {stack: [0; 512]}
+        box Stack {stack: [0; 1024]}
     }
 }
 
@@ -117,7 +117,9 @@ pub extern "C" fn _ap_start() -> ! {
 
 #[no_mangle]
 pub extern "C" fn pick_stack() -> usize {
-    unsafe {(&STACK as *const Stack as usize) + (4096 - 8)}
+    let stack = unsafe {(&STACK as *const Stack as usize) + ((4096 * 2) - 8)};
+    println!("called pick_stack {:x}", stack);
+    stack
 }
 
 #[no_mangle]
@@ -131,6 +133,9 @@ pub extern "C" fn ap_pick_stack() -> usize {
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
     println!("the kernel stack is at {:x}", unsafe {&STACK as *const Stack as usize});
+    println!("mb_config at {:x}", mb_config as *const mb_info as usize);
+    //let rsp = unsafe{machine::get_rsp()};
+    //println!("rsp at {:x}", rsp);
     let mut uart = U8250 {};
     let hi = "Hello there!\n";
     uart.write_string(hi);
