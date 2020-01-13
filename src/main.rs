@@ -144,11 +144,11 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
     println!("smp::me(): {}", smp::me());
-    pci::checkAllBuses();
+    pci::check_all_buses();
     unsafe {
         //ALLOCATOR.init(0x200000, 0x800000);
         ALLOCATOR.lock().init(0x200000, 0x800000);
-    }    
+    }
     thread::init();
     timer::calibrate(1000);
     timer::init();
