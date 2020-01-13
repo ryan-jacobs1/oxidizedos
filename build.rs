@@ -5,14 +5,18 @@ fn main() {
     // Remove previous bootstrap asm files
     Command::new("rm")
     .stdout(Stdio::inherit())
-    .args(&["-rf", "BUILD_FILES"])
+    .args(&["-r", "BUILD_FILES"])
     .spawn()
+    .expect("Failed to start")
+    .wait()
     .expect("Failed to remove BUILD_FILES");
  
     Command::new("mkdir")
     .stdout(Stdio::inherit())
-    .args(&["BUILD_FILES"])
+    .args(&["-p", "BUILD_FILES"])
     .spawn()
+    .expect("Failed to start")
+    .wait()
     .expect("Failed to create directory BUILD_FILES");
     
     cc::Build::new()
