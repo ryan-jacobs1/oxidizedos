@@ -3,3 +3,5 @@ target = "x86_64-oxos.json"
 rustflags = [
   "-C", "link-arg=-Tlink.ld"
 ]
+[target.'cfg(target_os = "none")']
+runner = "./halogen runner"
