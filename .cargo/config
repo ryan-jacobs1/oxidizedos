@@ -4,4 +4,4 @@ rustflags = [
   "-C", "link-arg=-Tlink.ld"
 ]
 [target.'cfg(target_os = "none")']
-runner = "./halogen runner -path"
+runner = "./halogen runner -p"
