@@ -6,8 +6,9 @@
 #![feature(alloc, allocator_api)]
 #![feature(const_fn)]
 
+
 mod machine;
-mod u8250;
+pub mod u8250;
 pub mod config;
 mod heap;
 mod vmm;
