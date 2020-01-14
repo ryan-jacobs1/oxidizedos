@@ -1,13 +1,20 @@
 #![no_std]
+#![no_main]
 #![feature(alloc_error_handler)]
 #![feature(panic_info_message)]
 #![feature(box_syntax)]
 #![feature(trait_alias)]
 #![feature(alloc, allocator_api)]
 #![feature(const_fn)]
+#![feature(custom_test_frameworks)]
+#![reexport_test_harness_main = "test_main"]
+#![test_runner(crate::test_runner)]
 
 
-mod machine;
+
+
+
+pub mod machine;
 pub mod u8250;
 pub mod config;
 mod heap;
@@ -91,7 +98,19 @@ impl BoxedStack {
     }
 }
 
+#[cfg(test)]
+fn test_runner(tests: &[&dyn Fn()]) {
+    println!("Running {} tests", tests.len());
+    for test in tests {
+        test();
+    }
+}
 
+#[cfg(test)]
+#[no_mangle]
+pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
+    machine::exit(machine::EXIT_QEMU_SUCCESS);
+}
 
 #[no_mangle]
 pub extern "C" fn _ap_start() -> ! {
@@ -129,7 +148,7 @@ pub extern "C" fn ap_pick_stack() -> usize {
 }
 
 #[no_mangle]
-pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) -> ! {
+pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) {
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
     println!("the kernel stack is at {:x}", unsafe {&STACK as *const Stack as usize});
     println!("mb_config at {:x}", mb_config as *const mb_info as usize);
@@ -174,20 +193,6 @@ pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) -> ! {
     unsafe {
         machine::sti();
     }
-    println!("scheduling threads");
-    let counter = Arc::new(AtomicU32::new(0));
-    for i in 0..100 {
-        
-        let c = Arc::clone(&counter);
-        let x = TCBImpl::new(box move || {
-            c.fetch_add(1, Ordering::SeqCst);
-        });
-        thread::schedule(box x);
-    }
-    println!("scheduled all threads");
-    while counter.load(Ordering::SeqCst) < 100 {}
-    println!("counter: {}", counter.load(Ordering::SeqCst));
-    loop {}
 }
 
 #[panic_handler]
@@ -202,4 +207,20 @@ fn panic(_info: &PanicInfo) -> ! {
 #[alloc_error_handler]
 fn alloc_panic(layout: alloc::alloc::Layout) -> ! {
     panic!("Core {}: Failure in alloc\n", smp::me());
+}
+
+pub fn adder_test() {
+    println!("scheduling threads");
+    let counter = Arc::new(AtomicU32::new(0));
+    for i in 0..100 {
+        
+        let c = Arc::clone(&counter);
+        let x = TCBImpl::new(box move || {
+            c.fetch_add(1, Ordering::SeqCst);
+        });
+        thread::schedule(box x);
+    }
+    println!("scheduled all threads");
+    while counter.load(Ordering::SeqCst) < 100 {}
+    println!("counter: {}", counter.load(Ordering::SeqCst));
 }

@@ -1,6 +1,8 @@
 use crate::thread::TCBInfo;
 use crate::println;
 
+pub static EXIT_QEMU_SUCCESS: u32 = 32;
+
 extern "C" {
     pub fn outb(port: u32, val: u32);
     pub fn outw(port: u32, val: u32);
@@ -47,4 +49,11 @@ pub fn enable(was_enabled: bool) {
 pub fn are_interrupts_enabled() -> bool {
     let flags = unsafe {get_flags()};
     (flags & (1 << 9)) > 0
+}
+
+pub fn exit(exit_code: u32) -> ! {
+    unsafe {
+        outl(0xf4, 32);
+    }
+    loop {}
 }
