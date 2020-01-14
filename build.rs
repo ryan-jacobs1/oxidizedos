@@ -19,11 +19,12 @@ fn main() {
     .wait()
     .expect("Failed to create directory BUILD_FILES");
     
+    /*
     cc::Build::new()
     .file("src/init/multiboot.S")
     .flag("-c")
     .compile("multiboot.o");
-    
+    */
 
     cc::Build::new()
     .file("src/machine.S")
