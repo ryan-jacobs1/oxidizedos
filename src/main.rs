@@ -37,7 +37,6 @@ fn trivial_assertion() {
 #[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
-    machine::exit(32);
     kernel_init(mb_config, end);
     adder_test();
     machine::exit(machine::EXIT_QEMU_SUCCESS);
