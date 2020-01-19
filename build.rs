@@ -36,13 +36,17 @@ fn main() {
     .stdout(Stdio::inherit())
     .args(&["src/init/longmode.S", "-o", "BUILD_FILES/longmode.o", "-felf64"])
     .spawn()
+    .expect("")
+    .wait()
     .expect("failed to compile longmode.S");
 
     Command::new("nasm")
     .stdout(Stdio::inherit())
     .args(&["src/init/boot.S", "-o", "BUILD_FILES/boot.o", "-felf64"])
     .spawn()
-    .expect("failed to compile longmode.S");
+    .expect("failed to run nasm")
+    .wait()
+    .expect("failed to compile boot.S");
     
     cc::Build::new()
     .object("BUILD_FILES/boot.o")
