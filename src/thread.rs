@@ -114,8 +114,8 @@ impl TCBImpl {
     const NUM_CALLEE_SAVED: usize = 6;
 
     pub fn new(work: Box<Task>) -> TCBImpl {
-        let mut stack: Box<[u64]> = box [0; 512];
-        let end_of_stack = 511;
+        let mut stack: Box<[u64]> = box [0; 4096];
+        let end_of_stack = 4095;
         stack[end_of_stack] = thread_entry_point as *const () as u64;
         let index: usize = end_of_stack - TCBImpl::NUM_CALLEE_SAVED - 1;
         stack[index] = 0; // Flags

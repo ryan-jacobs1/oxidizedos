@@ -76,15 +76,15 @@ static CORES_ACTIVE: AtomicU32 = AtomicU32::new(0);
 #[repr(C, align(4096))]
 #[derive(Copy, Clone)]
 pub struct Stack {
-    pub stack: [u64; 1024],
+    pub stack: [u64; 2048],
 }
 
 impl Stack {
     pub const fn new() -> Stack {
-        Stack {stack: [0; 1024]}
+        Stack {stack: [0; 2048]}
     }
     pub fn boxed_new() -> Box<Stack> {
-        box Stack {stack: [0; 1024]}
+        box Stack {stack: [0; 2048]}
     }
 }
 
@@ -135,7 +135,7 @@ pub extern "C" fn _ap_start() -> ! {
 
 #[no_mangle]
 pub extern "C" fn pick_stack() -> usize {
-    let stack = unsafe {(&STACK as *const Stack as usize) + ((4096 * 2) - 8)};
+    let stack = unsafe {(&STACK as *const Stack as usize) + ((2048 * 8) - 8)};
     println!("called pick_stack {:x}", stack);
     stack
 }
