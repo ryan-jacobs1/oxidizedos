@@ -212,15 +212,22 @@ pub fn init() {
 }
 
 pub fn surrender() {
-    surrender_help(true);
+    surrender_help(true, true);
 }
 
 pub fn stop() {
-    surrender_help(false);
+    surrender_help(false, false);
 }
 
 /// Yield is a reserved word in Rust, so we use a synonym
-fn surrender_help(run_again: bool) {
+fn surrender_help(run_again: bool, back_out: bool) {
+    // No point of context switching if nothing is on the queue
+    // Not a race condition as we double check later on
+    if back_out {
+        if READY.lock().is_empty() {
+            return
+        }
+    }
     // If there's no active thread, return as we are currently surrendering
     let mut current_thread: Box<dyn TCB> = match swap_active(None) {
         Some(mut tcb) => {tcb},
