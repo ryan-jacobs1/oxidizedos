@@ -10,6 +10,7 @@ use oxos::{kernel_init, adder_test};
 use oxos::config::mb_info;
 use oxos::{print, println};
 
+mod vga_buffer;
 
 #[cfg(test)]
 #[no_mangle]
@@ -39,6 +40,32 @@ fn trivial_assertion() {
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     kernel_init(mb_config, end);
     adder_test();
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    println_vga!("Hello World{}", "!");
+    loop {}
     machine::exit(machine::EXIT_QEMU_SUCCESS);
 }
 

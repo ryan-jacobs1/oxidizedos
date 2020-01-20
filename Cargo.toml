@@ -16,6 +16,7 @@ panic = "abort"
 spin = "0.5.2"
 bitfield = "0.13.2"
 linked_list_allocator = "0.6.4"
+volatile = "0.2.6"
 
 
 [dependencies.lazy_static]
