@@ -13,18 +13,18 @@
 
 
 
-
+pub mod ismutex;
 pub mod machine;
 pub mod u8250;
 pub mod config;
+pub mod vga_buffer;
 mod heap;
 mod vmm;
 mod smp;
 mod idt;
 mod thread;
 mod semaphore;
-mod spinlock;
-mod ismutex;
+pub mod spinlock;
 mod timer;
 mod linked_list_allocator_2;
 mod pci;

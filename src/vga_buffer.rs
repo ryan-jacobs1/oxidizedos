@@ -1,10 +1,11 @@
 use volatile::Volatile;
 use core::fmt;
 use lazy_static::lazy_static;
-use spin::Mutex;
+
+use crate::ismutex::ISMutex;
 
 lazy_static! {
-    pub static ref VGA_WRITER: Mutex<Writer> = Mutex::new(Writer {
+    pub static ref VGA_WRITER: ISMutex<Writer> = ISMutex::new(Writer {
         column_position: 0,
         color_code: ColorCode::new(Color::Yellow, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
@@ -18,7 +19,7 @@ macro_rules! print_vga {
 
 #[macro_export]
 macro_rules! println_vga {
-    () => ($crate::print!("\n"));
+    () => ($crate::print_vga!("\n"));
     ($($arg:tt)*) => ($crate::print_vga!("{}\n", format_args!($($arg)*)));
 }
 

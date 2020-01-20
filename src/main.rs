@@ -8,9 +8,8 @@
 use oxos::machine;
 use oxos::{kernel_init, adder_test};
 use oxos::config::mb_info;
-use oxos::{print, println};
+use oxos::{print, println, println_vga};
 
-mod vga_buffer;
 
 #[cfg(test)]
 #[no_mangle]
@@ -40,6 +39,7 @@ fn trivial_assertion() {
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     kernel_init(mb_config, end);
     adder_test();
+    unsafe {machine::cli()};
     println_vga!("Hello World{}", "!");
     println_vga!("Hello World{}", "!");
     println_vga!("Hello World{}", "!");
