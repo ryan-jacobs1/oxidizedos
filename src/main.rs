@@ -6,7 +6,7 @@
 
 
 use oxos::machine;
-use oxos::{kernel_init, adder_test};
+use oxos::{kernel_init};
 use oxos::config::mb_info;
 use oxos::{print, println, println_vga};
 
@@ -38,7 +38,6 @@ fn trivial_assertion() {
 #[no_mangle]
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     kernel_init(mb_config, end);
-    adder_test();
     unsafe {machine::cli()};
     println_vga!("Hello World{}", "!");
     println_vga!("Hello World{}", "!");

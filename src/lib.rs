@@ -209,18 +209,3 @@ fn alloc_panic(layout: alloc::alloc::Layout) -> ! {
     panic!("Core {}: Failure in alloc\n", smp::me());
 }
 
-pub fn adder_test() {
-    println!("scheduling threads");
-    let counter = Arc::new(AtomicU32::new(0));
-    for i in 0..100 {
-        
-        let c = Arc::clone(&counter);
-        let x = TCBImpl::new(box move || {
-            c.fetch_add(1, Ordering::SeqCst);
-        });
-        thread::schedule(box x);
-    }
-    println!("scheduled all threads");
-    while counter.load(Ordering::SeqCst) < 100 {}
-    println!("counter: {}", counter.load(Ordering::SeqCst));
-}
