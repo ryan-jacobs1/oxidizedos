@@ -9,18 +9,18 @@ use spin::{Mutex, MutexGuard};
 use core::cell::UnsafeCell;
 use crate::spinlock::SpinLock;
 use crate::machine;
+use crate::println;
 
 /// A universal synchronization primitive. Blocks if count == 0.
-struct Semaphore {
+pub struct Semaphore {
     control: SpinLock,
     internals: SemaphoreInternalWrapper
 }
 
 impl Semaphore {
-    pub fn new() -> Arc<Semaphore> {
-        let sem = box Semaphore {control: SpinLock::new(), internals: SemaphoreInternalWrapper::new()};
+    pub fn new(count: u64) -> Arc<Semaphore> {
+        let sem = box Semaphore {control: SpinLock::new(), internals: SemaphoreInternalWrapper::new(count)};
         let sem_arc: Arc<Semaphore> = Arc::from(sem);
-        sem_arc.control.lock();
         unsafe {
             let internals = sem_arc.internals.data.get();
             (*internals).weak_self = Some(Arc::downgrade(&sem_arc));
@@ -28,8 +28,10 @@ impl Semaphore {
         sem_arc
     }
     
-    pub fn up(&mut self) {
+    pub fn up(&self) {
+        println!("acquiring lock");
         let was = self.control.lock();
+        println!("acquired lock");
         let internals = self.internals.data.get();
         unsafe {
             match (*internals).blocked.pop_front() {
@@ -42,7 +44,7 @@ impl Semaphore {
         self.control.unlock(was);
     }
 
-    pub fn down(&mut self) {
+    pub fn down(&self) {
         let was = self.control.lock();
         let mut internals = unsafe {Box::from_raw(self.internals.data.get())};
         let count = unsafe {((*internals).count)};
@@ -87,8 +89,8 @@ struct SemaphoreInternalWrapper {
 }
 
 impl SemaphoreInternalWrapper {
-    pub fn new() -> SemaphoreInternalWrapper {
-        SemaphoreInternalWrapper {data: UnsafeCell::new(SemaphoreInternals::new())}
+    pub fn new(count: u64) -> SemaphoreInternalWrapper {
+        SemaphoreInternalWrapper {data: UnsafeCell::new(SemaphoreInternals::new(count))}
     }
 }
 
@@ -103,8 +105,8 @@ struct SemaphoreInternals {
 }
 
 impl SemaphoreInternals {
-    pub fn new() -> SemaphoreInternals {
-        SemaphoreInternals { count: 0, blocked: VecDeque::new(), weak_self: None}
+    pub fn new(count: u64) -> SemaphoreInternals {
+        SemaphoreInternals { count: count, blocked: VecDeque::new(), weak_self: None}
     }
 }
 
