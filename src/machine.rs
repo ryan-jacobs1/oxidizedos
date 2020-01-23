@@ -2,6 +2,7 @@ use crate::thread::TCBInfo;
 use crate::println;
 
 pub static EXIT_QEMU_SUCCESS: u32 = 5;
+pub static EXIT_QEMU_FAILURE: u32 = 3;
 
 extern "C" {
     pub fn outb(port: u32, val: u32);

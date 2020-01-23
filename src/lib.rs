@@ -18,16 +18,16 @@ pub mod machine;
 pub mod u8250;
 pub mod config;
 pub mod vga_buffer;
-mod heap;
-mod vmm;
-mod smp;
-mod idt;
-mod thread;
-mod semaphore;
+pub mod heap;
+pub mod vmm;
+pub mod smp;
+pub mod idt;
+pub mod thread;
+pub mod semaphore;
 pub mod spinlock;
-mod timer;
-mod linked_list_allocator_2;
-mod pci;
+pub mod timer;
+pub mod linked_list_allocator_2;
+pub mod pci;
 
 #[macro_use]
 extern crate bitfield;
@@ -51,7 +51,6 @@ use linked_list_allocator::LockedHeap;
 use linked_list_allocator_2::isheap::ISHeap;
 use thread::TCBImpl;
 use alloc::sync::Arc;
-
 
 
 static HELLO: &[u8] = b"Off to the races!\n";
@@ -201,6 +200,7 @@ fn panic(_info: &PanicInfo) -> ! {
     if let Some(s) = _info.message() {
         u8250::_print(*s);
     }
+    machine::exit(machine::EXIT_QEMU_FAILURE);
     loop {}
 }
 
