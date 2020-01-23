@@ -1,13 +1,34 @@
 use crate::println;
 use crate::machine;
+use alloc::{vec, vec::Vec};
 
 /*** FOR HELP UNDERSTANDING THE PCI GO TO wiki.osdev.org/PCI ***/
+
+struct SendWrapper<T> {
+    pub data: T,
+}
+impl SendWrapper<T> {
+    fn new(data: T) -> SendWrapper<T> {
+        SendWrapper { data }
+    }
+}
+unsafe impl Send for SendWrapper<T> {}
+unsafe impl Sync for SendWrapper<T> {}
+
+lazy_static! {
+    pub static ref PCI_00DEVICES: SendWrapper<Box<Vec<PCI00DeviceInfo>>> = SendWrapper::new(load_all_pci_00devices());
+}
+pub static registered_irqs: [u8; 4] = {0xFF, 0xFF, 0xFF, 0xFF};
+pub static registered_devices: Option<[Box<Vec<dyn PCIDevice>>; 4]> = None;
 
 /* I/O port for PCI configuration */
 pub static CONFIG_ADDRESS: u32 = 0xCF8;
 
 /* I/O port for accessing CONFIG_DATA register */
 pub static CONFIG_DATA: u32 = 0xCFC;
+
+/* NULL intin value */
+pub static intin: u8 = 0xFF;
 
 #[derive(Default)]
 pub struct PCIDeviceHeader {
@@ -190,66 +211,60 @@ impl PCI00DeviceInfo {
 		println!("Max Latency            :   {}", self.max_latency);
     }
 
-    /*
-     * too lazy to implement this
     fn printBARsVerbose(&self) {
         for i in 0..6 {
 			// if this BAR is 0, print it does not exist
 			if self.base_addr[i] == 0 {
                 println!("Base Address Register {} is null", i);
             } else {
-				println!("Base Address Register {} is a ", i);
-				if ((self.base_addr[i] & 1) > 0) {
-					println!("I/O Space BAR: 0x{}",
-						   (self.base_addr[i] & 0xFFFFFFFC));
-                    println!("    Its address space is size: 0x{} bytes",
-						   getAddressSpaceSize(i));
+				print!("Base Address Register {} is a ", i);
+				if (self.base_addr[i] & 1) > 0 {
+					print!("I/O Space BAR: 0x{:x}", (self.base_addr[i] & 0xFFFFFFFC));
+                    println!("    Its address space is size: 0x{:x} bytes", getAddressSpaceSize(i));
 				} else {
 					println!("Memory Space BAR ");
-					if (((self.base_addr[i] >> 3) & 1) > 1 {
-                        println!("that is prefetchable with register size ");
-					else
-                        println!("that is not prefetchable with register size ");
+					if ((self.base_addr[i] >> 3) & 1) > 1 {
+                        print!("that is prefetchable with register size ");
+                    } else {
+                        print!("that is not prefetchable with register size ");
+                    }
 
-					if (((self.base_addr[i] >> 1) & 3) == 0) {
-						println!("32 bits: 0x{}", (self.base_addr[i] & 0xFFFFFFF0));
-						println!("    Its address space is size: 0x{} bytes",
-							   getAddressSpaceSize(i));
-					} else if (((self.base_addr[i] >> 1) & 3) == 3)
+					if ((self.base_addr[i] >> 1) & 3) == 0 {
+						print!("32 bits: 0x{:x}", (self.base_addr[i] & 0xFFFFFFF0));
+						println!("    Its address space is size: 0x{:x} bytes", getAddressSpaceSize(i));
+					} else if ((self.base_addr[i] >> 1) & 3) == 3 {
                         println!("64 bits");
-					else
+                    } else {
                         println!("unsupported");
+                    }
 				}
 			}
 		}
-    } */
+    }
 }
 
-//TODO extern ArrList<PCI00DeviceInfo *> *pci00Devs;
-
 /* Allows a device to register itself for an IRQ */
-/*
-class PCIDevice;
-void registerDevice(PCIDevice *device);
-class PCIDevice {
-public:
-    u8 intin = 0xFF;
-
+pub trait PCIDevice {
     PCIDevice(PCI00DeviceInfo &info) : intin(info.acpi_intin_assignment)
     {
         registerDevice(this);
     }
-    virtual ~PCIDevice()
-    {}
 
     // methods used from this interface externally
-    virtual bool wasInterrupted() = 0;
-    virtual void handleInterrupt() = 0;
+    fn wasInterrupted() -> bool;
+    fn handleInterrupt();
 };
 
-void init(void);
-void initIrq(void);
-*/
+fn registerDevice(PCIDevice device) {
+
+}
+pub fn init() {
+
+}
+pub fn initIrq() {
+
+}
+
 
 fn config_read8(bus: u8, slot: u8, func: u8, offset: u8) -> u8 {
     let lbus: u32 = bus as u32;
@@ -403,10 +418,30 @@ pub fn check_all_buses() {
     }
 }
 
-/*
-void loadDevice(u8 bus, u8 slot);
-void loadAllPCI00Devices();
-*/
+fn load_device(devs: &mut Box<Vec<PCI00DeviceInfo>>, bus: u8, slot: u8) {
+    // try and read first configuration register
+    // if we get 0xFFFF then we know that the slot has no device since no device has vendor id 0xFFFF
+    let vendor: u16 = config_read16(bus, slot, 0, 0);
+    if vendor != 0xFFFF {
+        // the slot has a device that exists
+        let device: u16 = config_read16(bus, slot, 0, 2);
+
+        println!("The bus {} has slot {} with device {:x} and vendor {:x}", bus, slot, device, vendor);
+        let Option<PCI00DeviceInfo> tmp = get_00device_info(bus, slot);
+        if let tmp = Some(dev) {
+            devs.push(dev);
+        }
+    }
+}
+pub fn load_all_pci_00devices() -> Box<Vec<PCI00DeviceInfo>> {
+    let mut devs: Box<Vec<PCI00DeviceInfo>> = box vec![];
+    for bus in 0..256 {
+        for slot as u8 in 0..32 {
+            load_device(bus as u8, slot, devs);
+        }
+    }
+    devs
+}
 
 // returns an Option: Some with a pci device with header 00 if found, None otherwise
 fn get_00device_info(bus: u8, slot: u8) -> Option<PCI00DeviceInfo> {
@@ -419,9 +454,41 @@ fn get_00device_info(bus: u8, slot: u8) -> Option<PCI00DeviceInfo> {
     }
 }
 
-/*
-PCI00DeviceInfo *find00Device(u16 device_id, u16 vendor_id);
-PCI00DeviceInfo *get00Device(u8 bus, u8 slot);
+pub fn find_00device(device_id: u16, vendor_id: u16) -> Option<&'static PCI00DeviceInfo> {
+    let devices = PCI_00DEVICES.data.len();
+    for i in 0..devices {
+        if pci_00devs[i].device_id == device_id && pci_00devs[i].vendor_id == vendor_id {
+            return pci_00devs[i];
+        }
+    }
+    // device not found
+    None
+}
 
-void registerIrq(u8 intin);
-*/
+pub fn get_00device(bus: u8, slot: u8) -> Option<&'static PCI00DeviceInfo> {
+    let devices = pci_00devs.len();
+    for i in 0..devices {
+        if pci_00devs[i].bus == bus && pci_00devs[i].slot == slot {
+            return pci_00devs[i];
+        }
+    }
+    // device not found
+    None
+}
+
+pub fn register_irq(intin: u8) {
+    for i in 0..4 {
+        if registered_irqs[i] == intin {
+            return; /* IRQ already registered */
+        }
+    }
+
+    /* Not already registered, register it */
+    for i in 0..4 {
+        if registered_irqs[i] == 0xFF {
+            registered_irqs[i] = intin;
+            return;
+        }
+    }
+    println!("Tried to register more than 4 IRQs to a PCI, please contact George in accounting");
+}
