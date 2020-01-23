@@ -28,6 +28,7 @@ mod ismutex;
 mod timer;
 mod linked_list_allocator_2;
 mod pci;
+mod ide;
 
 #[macro_use]
 extern crate bitfield;
