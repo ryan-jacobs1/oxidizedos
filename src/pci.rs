@@ -5,10 +5,11 @@ use alloc::{vec, vec::Vec};
 use alloc::boxed::Box;
 use core::marker::{Send, Sync};
 use core::ops::{Deref, DerefMut};
+use crate::ismutex::ISMutex;
 
 /*** FOR HELP UNDERSTANDING THE PCI GO TO wiki.osdev.org/PCI ***/
 
-struct Wrapper<T> {
+pub struct Wrapper<T> {
     pub value: T,
 }
 impl<T> Wrapper<T> {
@@ -33,8 +34,10 @@ impl<T> DerefMut for Wrapper<T> {
 
 lazy_static! {
     pub static ref PCI_00DEVICES: Wrapper<Vec<PCI00DeviceInfo>> = Wrapper::new(load_all_pci_00devices());
-    pub static ref REGISTERED_IRQS: Wrapper<[u8; 4]> = Wrapper::new([0xFF; 4]);
-    pub static ref REGISTERED_DEVICES: Wrapper<[Vec<Box<dyn PCIDevice>>; 4]> = Wrapper::new([vec![], vec![], vec![], vec![]]);
+}
+lazy_static! {
+    pub static ref REGISTERED_IRQS: ISMutex<Wrapper<[u8; 4]>> = ISMutex::new(Wrapper::new([0xFF; 4]));
+    pub static ref REGISTERED_DEVICES: ISMutex<Wrapper<[Vec<Box<dyn PCIDevice>>; 4]>> = ISMutex::new(Wrapper::new([vec![], vec![], vec![], vec![]]));
 }
 
 /* I/O port for PCI configuration */
@@ -497,15 +500,15 @@ pub fn get_00device(bus: u8, slot: u8) -> Option<&'static PCI00DeviceInfo> {
 
 pub fn register_irq(intin: u8) {
     for i in 0..4 {
-        if REGISTERED_IRQS[i] == intin {
+        if REGISTERED_IRQS.lock()[i] == intin {
             return; /* IRQ already registered */
         }
     }
 
     /* Not already registered, register it */
     for i in 0..4 {
-        if REGISTERED_IRQS[i] == 0xFF {
-            REGISTERED_IRQS[i] = INTIN;
+        if REGISTERED_IRQS.lock()[i] == 0xFF {
+            REGISTERED_IRQS.lock()[i] = intin;
             return;
         }
     }
