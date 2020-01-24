@@ -1,25 +1,41 @@
 use crate::println;
+use crate::print;
 use crate::machine;
 use alloc::{vec, vec::Vec};
+use alloc::boxed::Box;
+use core::marker::{Send, Sync};
+use core::ops::{Deref, DerefMut};
 
 /*** FOR HELP UNDERSTANDING THE PCI GO TO wiki.osdev.org/PCI ***/
 
-struct SendWrapper<T> {
-    pub data: T,
+struct Wrapper<T> {
+    pub value: T,
 }
-impl SendWrapper<T> {
-    fn new(data: T) -> SendWrapper<T> {
-        SendWrapper { data }
+impl<T> Wrapper<T> {
+    fn new(value: T) -> Wrapper<T> {
+        Wrapper { value }
     }
 }
-unsafe impl Send for SendWrapper<T> {}
-unsafe impl Sync for SendWrapper<T> {}
+unsafe impl<T> Send for Wrapper<T> {}
+unsafe impl<T> Sync for Wrapper<T> {}
+impl<T> Deref for Wrapper<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+impl<T> DerefMut for Wrapper<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
 
 lazy_static! {
-    pub static ref PCI_00DEVICES: SendWrapper<Box<Vec<PCI00DeviceInfo>>> = SendWrapper::new(load_all_pci_00devices());
+    pub static ref PCI_00DEVICES: Wrapper<Vec<PCI00DeviceInfo>> = Wrapper::new(load_all_pci_00devices());
+    pub static ref REGISTERED_IRQS: Wrapper<[u8; 4]> = Wrapper::new([0xFF; 4]);
+    pub static ref REGISTERED_DEVICES: Wrapper<[Vec<Box<dyn PCIDevice>>; 4]> = Wrapper::new([vec![], vec![], vec![], vec![]]);
 }
-pub static registered_irqs: [u8; 4] = {0xFF, 0xFF, 0xFF, 0xFF};
-pub static registered_devices: Option<[Box<Vec<dyn PCIDevice>>; 4]> = None;
 
 /* I/O port for PCI configuration */
 pub static CONFIG_ADDRESS: u32 = 0xCF8;
@@ -28,7 +44,7 @@ pub static CONFIG_ADDRESS: u32 = 0xCF8;
 pub static CONFIG_DATA: u32 = 0xCFC;
 
 /* NULL intin value */
-pub static intin: u8 = 0xFF;
+pub static INTIN: u8 = 0xFF;
 
 #[derive(Default)]
 pub struct PCIDeviceHeader {
@@ -211,7 +227,7 @@ impl PCI00DeviceInfo {
 		println!("Max Latency            :   {}", self.max_latency);
     }
 
-    fn printBARsVerbose(&self) {
+    fn print_bars_verbose(&self) {
         for i in 0..6 {
 			// if this BAR is 0, print it does not exist
 			if self.base_addr[i] == 0 {
@@ -220,7 +236,7 @@ impl PCI00DeviceInfo {
 				print!("Base Address Register {} is a ", i);
 				if (self.base_addr[i] & 1) > 0 {
 					print!("I/O Space BAR: 0x{:x}", (self.base_addr[i] & 0xFFFFFFFC));
-                    println!("    Its address space is size: 0x{:x} bytes", getAddressSpaceSize(i));
+                    println!("    Its address space is size: 0x{:x} bytes", self.get_address_space_size(i as usize));
 				} else {
 					println!("Memory Space BAR ");
 					if ((self.base_addr[i] >> 3) & 1) > 1 {
@@ -231,7 +247,7 @@ impl PCI00DeviceInfo {
 
 					if ((self.base_addr[i] >> 1) & 3) == 0 {
 						print!("32 bits: 0x{:x}", (self.base_addr[i] & 0xFFFFFFF0));
-						println!("    Its address space is size: 0x{:x} bytes", getAddressSpaceSize(i));
+						println!("    Its address space is size: 0x{:x} bytes", self.get_address_space_size(i as usize));
 					} else if ((self.base_addr[i] >> 1) & 3) == 3 {
                         println!("64 bits");
                     } else {
@@ -245,19 +261,22 @@ impl PCI00DeviceInfo {
 
 /* Allows a device to register itself for an IRQ */
 pub trait PCIDevice {
+    /*
     PCIDevice(PCI00DeviceInfo &info) : intin(info.acpi_intin_assignment)
     {
         registerDevice(this);
-    }
+    }*/
 
     // methods used from this interface externally
-    fn wasInterrupted() -> bool;
-    fn handleInterrupt();
-};
+    fn wasInterrupted(&self) -> bool;
+    fn handleInterrupt(&self);
+}
 
-fn registerDevice(PCIDevice device) {
+/*
+fn register_device(device: dyn PCIDevice) {
 
 }
+*/
 pub fn init() {
 
 }
@@ -418,7 +437,7 @@ pub fn check_all_buses() {
     }
 }
 
-fn load_device(devs: &mut Box<Vec<PCI00DeviceInfo>>, bus: u8, slot: u8) {
+fn load_device(devs: &mut Vec<PCI00DeviceInfo>, bus: u8, slot: u8) {
     // try and read first configuration register
     // if we get 0xFFFF then we know that the slot has no device since no device has vendor id 0xFFFF
     let vendor: u16 = config_read16(bus, slot, 0, 0);
@@ -427,17 +446,17 @@ fn load_device(devs: &mut Box<Vec<PCI00DeviceInfo>>, bus: u8, slot: u8) {
         let device: u16 = config_read16(bus, slot, 0, 2);
 
         println!("The bus {} has slot {} with device {:x} and vendor {:x}", bus, slot, device, vendor);
-        let Option<PCI00DeviceInfo> tmp = get_00device_info(bus, slot);
-        if let tmp = Some(dev) {
+        let tmp: Option<PCI00DeviceInfo> = get_00device_info(bus, slot);
+        if let Some(dev) = tmp {
             devs.push(dev);
         }
     }
 }
-pub fn load_all_pci_00devices() -> Box<Vec<PCI00DeviceInfo>> {
-    let mut devs: Box<Vec<PCI00DeviceInfo>> = box vec![];
+pub fn load_all_pci_00devices() -> Vec<PCI00DeviceInfo> {
+    let mut devs: Vec<PCI00DeviceInfo> = vec![];
     for bus in 0..256 {
-        for slot as u8 in 0..32 {
-            load_device(bus as u8, slot, devs);
+        for slot in 0..32 {
+            load_device(&mut devs, bus as u8, slot as u8);
         }
     }
     devs
@@ -455,10 +474,10 @@ fn get_00device_info(bus: u8, slot: u8) -> Option<PCI00DeviceInfo> {
 }
 
 pub fn find_00device(device_id: u16, vendor_id: u16) -> Option<&'static PCI00DeviceInfo> {
-    let devices = PCI_00DEVICES.data.len();
+    let devices = PCI_00DEVICES.len();
     for i in 0..devices {
-        if pci_00devs[i].device_id == device_id && pci_00devs[i].vendor_id == vendor_id {
-            return pci_00devs[i];
+        if PCI_00DEVICES[i].header.device_id == device_id && PCI_00DEVICES[i].header.vendor_id == vendor_id {
+            return Some(&PCI_00DEVICES[i]);
         }
     }
     // device not found
@@ -466,10 +485,10 @@ pub fn find_00device(device_id: u16, vendor_id: u16) -> Option<&'static PCI00Dev
 }
 
 pub fn get_00device(bus: u8, slot: u8) -> Option<&'static PCI00DeviceInfo> {
-    let devices = pci_00devs.len();
+    let devices = PCI_00DEVICES.len();
     for i in 0..devices {
-        if pci_00devs[i].bus == bus && pci_00devs[i].slot == slot {
-            return pci_00devs[i];
+        if PCI_00DEVICES[i].header.bus == bus && PCI_00DEVICES[i].header.slot == slot {
+            return Some(&PCI_00DEVICES[i]);
         }
     }
     // device not found
@@ -478,15 +497,15 @@ pub fn get_00device(bus: u8, slot: u8) -> Option<&'static PCI00DeviceInfo> {
 
 pub fn register_irq(intin: u8) {
     for i in 0..4 {
-        if registered_irqs[i] == intin {
+        if REGISTERED_IRQS[i] == intin {
             return; /* IRQ already registered */
         }
     }
 
     /* Not already registered, register it */
     for i in 0..4 {
-        if registered_irqs[i] == 0xFF {
-            registered_irqs[i] = intin;
+        if REGISTERED_IRQS[i] == 0xFF {
+            REGISTERED_IRQS[i] = INTIN;
             return;
         }
     }
