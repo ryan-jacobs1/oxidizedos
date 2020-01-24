@@ -10,7 +10,7 @@ pub static DF: u8 = 0x20;
 pub static DRDY: u8 = 0x40;
 pub static BSY: u8 = 0x80;
 
-trait IDE {
+pub trait IDE {
     fn read_sector(&self, sector: u32, buffer: &mut [u32]);
     fn write_sector(&self, sector: u32, buffer: &mut [u32]);
 }
@@ -21,6 +21,10 @@ pub struct IDEImpl {
 
 impl IDEImpl {
     const SECTOR_SIZE: u32 = 512;
+    
+    pub fn new(drive: u32) -> IDEImpl {
+        IDEImpl {drive: drive}
+    }
 }
 
 impl IDE for IDEImpl {
