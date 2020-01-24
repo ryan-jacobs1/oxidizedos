@@ -10,16 +10,73 @@ pub static DF: u8 = 0x20;
 pub static DRDY: u8 = 0x40;
 pub static BSY: u8 = 0x80;
 
-pub struct IDE {
+trait IDE {
+    fn read_sector(&self, sector: u32, buffer: &mut [u32]);
+    fn write_sector(&self, sector: u32, buffer: &mut [u32]);
+}
+
+pub struct IDEImpl {
     drive: u32
 }
 
-impl IDE {
+impl IDEImpl {
     const SECTOR_SIZE: u32 = 512;
+}
 
-    pub fn read_sector(sector: u32, buffer: &mut [u32]) {
-        if buffer.len() * 4 < IDE::SECTOR_SIZE as usize {
+impl IDE for IDEImpl {
+    fn read_sector(&self, sector: u32, buffer: &mut [u32]) {
+        if buffer.len() * 4 < IDEImpl::SECTOR_SIZE as usize {
             panic!("Cannot read sector size bytes into buffer");
+        }
+        let base = port(self.drive);
+        let ch = channel(self.drive);
+        wait_for_drive(self.drive);
+        unsafe {
+            machine::outb(base + 2, 1);			// sector count
+            machine::outb(base + 3, sector >> 0);	// bits 7 .. 0
+            machine::outb(base + 4, sector >> 8);	// bits 15 .. 8
+            machine::outb(base + 5, sector >> 16);	// bits 23 .. 16
+            machine::outb(base + 6, 0xE0 | (ch << 4) | ((sector >> 24) & 0xf));
+            machine::outb(base + 7, 0x20);		// read with retry
+        }
+        wait_for_drive(self.drive);
+
+        while get_status(self.drive) & DRQ == 0 {
+            thread::surrender();
+        }
+        
+        // TODO use DMA (if supported)
+        for i in 0..IDEImpl::SECTOR_SIZE as usize / core::mem::size_of::<u32>() {
+            buffer[i as usize] = unsafe { machine::inl(base) }; 
+        }
+    }
+
+    fn write_sector(&self, sector: u32, buffer: &mut [u32]) {
+        if buffer.len() * 4 < IDEImpl::SECTOR_SIZE as usize {
+            panic!("Cannot write sector size bytes to disk");
+        }
+        let base = port(self.drive);
+        let ch = channel(self.drive);
+        wait_for_drive(self.drive);
+        unsafe {
+            machine::outb(base + 2, 1);			// sector count
+            machine::outb(base + 3, sector >> 0);	// bits 7 .. 0
+            machine::outb(base + 4, sector >> 8);	// bits 15 .. 8
+            machine::outb(base + 5, sector >> 16);	// bits 23 .. 16
+            machine::outb(base + 6, 0xE0 | (ch << 4) | ((sector >> 24) & 0xf));
+            machine::outb(base + 7, 0x30);		// write
+        }
+        wait_for_drive(self.drive);
+
+        while get_status(self.drive) & DRQ == 0 {
+            thread::surrender();
+        }
+
+        // TODO use DMA (if supported)
+        for i in 0..IDEImpl::SECTOR_SIZE as usize / core::mem::size_of::<u32>() {
+            unsafe {
+                machine::outl(base, buffer[i]);
+            }
         }
 
     }
