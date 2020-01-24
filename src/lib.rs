@@ -28,6 +28,7 @@ pub mod spinlock;
 mod timer;
 mod linked_list_allocator_2;
 mod pci;
+pub mod irq;
 
 #[macro_use]
 extern crate bitfield;

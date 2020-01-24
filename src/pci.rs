@@ -6,6 +6,7 @@ use alloc::boxed::Box;
 use core::marker::{Send, Sync};
 use core::ops::{Deref, DerefMut};
 use crate::ismutex::ISMutex;
+use crate::irq;
 
 /*** FOR HELP UNDERSTANDING THE PCI GO TO wiki.osdev.org/PCI ***/
 
@@ -32,12 +33,27 @@ impl<T> DerefMut for Wrapper<T> {
     }
 }
 
+fn pci_irq0_handler() {
+	pci_multi_jandler(0);
+}
+fn pci_irq1_handler() {
+	pci_multi_jandler(1);
+}
+fn pci_irq2_handler() {
+	pci_multi_jandler(2);
+}
+fn pci_irq3_handler() {
+	pci_multi_jandler(3);
+}
+
 lazy_static! {
     pub static ref PCI_00DEVICES: Wrapper<Vec<PCI00DeviceInfo>> = Wrapper::new(load_all_pci_00devices());
+    pub static ref HANDLERS: [fn(); 4] = [pci_irq0_handler, pci_irq1_handler, pci_irq2_handler, pci_irq3_handler];
 }
+/* TODO remove these locks */
 lazy_static! {
     pub static ref REGISTERED_IRQS: ISMutex<Wrapper<[u8; 4]>> = ISMutex::new(Wrapper::new([0xFF; 4]));
-    pub static ref REGISTERED_DEVICES: ISMutex<Wrapper<[Vec<Box<dyn PCIDevice>>; 4]>> = ISMutex::new(Wrapper::new([vec![], vec![], vec![], vec![]]));
+    pub static ref REGISTERED_DEVICES: ISMutex<Wrapper<[Vec<&'static PCIDevice>; 4]>> = ISMutex::new(Wrapper::new([vec![], vec![], vec![], vec![]]));
 }
 
 /* I/O port for PCI configuration */
@@ -45,9 +61,6 @@ pub static CONFIG_ADDRESS: u32 = 0xCF8;
 
 /* I/O port for accessing CONFIG_DATA register */
 pub static CONFIG_DATA: u32 = 0xCFC;
-
-/* NULL intin value */
-pub static INTIN: u8 = 0xFF;
 
 #[derive(Default)]
 pub struct PCIDeviceHeader {
@@ -148,6 +161,8 @@ pub struct PCI00DeviceInfo {
     pub acpi_intin_assignment: u8,
     pub min_grant: u8,
     pub max_latency: u8,
+
+    //pub intin: u8 = 0xFF,
 }
 
 impl PCI00DeviceInfo {
@@ -264,27 +279,48 @@ impl PCI00DeviceInfo {
 
 /* Allows a device to register itself for an IRQ */
 pub trait PCIDevice {
-    /*
-    PCIDevice(PCI00DeviceInfo &info) : intin(info.acpi_intin_assignment)
-    {
-        registerDevice(this);
-    }*/
+    // should be called once upon instantiation
+    fn setup_device(&'static self) where Self: core::marker::Sized {
+        register_device(self);
+    }
 
     // methods used from this interface externally
-    fn wasInterrupted(&self) -> bool;
-    fn handleInterrupt(&self);
+    fn was_interrupted(&self) -> bool;
+    fn handle_interrupt(&self);
+    fn get_intin(&self) -> u8;
 }
 
-/*
-fn register_device(device: dyn PCIDevice) {
+fn register_device(device: &'static PCIDevice) {
+    let irq: u8 = device.get_intin();
+    if irq == 0xFF {
+        println!("WARNING: Attempting to register an IRQDevice without initializing intin value.");
+        return;
+    }
 
+    /* Try to add it to registered devices */
+    for i in 0..4 {
+        if irq == REGISTERED_IRQS.lock()[i] {
+            REGISTERED_DEVICES.lock()[i].push(device);
+            return;
+        }
+    }
+    /* Should never get here */
+    println!("WARNING: intin value for the IRQDevice you attempted to register did not match any allocated\n");
 }
-*/
+
 pub fn init() {
+    lazy_static::initialize(&PCI_00DEVICES);
 
+    lazy_static::initialize(&REGISTERED_IRQS);
+    lazy_static::initialize(&REGISTERED_DEVICES);
 }
 pub fn initIrq() {
-
+    /* register irq handlers for PCI INTINs */
+    for i in 0..4 {
+        if REGISTERED_IRQS.lock()[i] != 0xFF {
+            irq::register_handler(REGISTERED_IRQS.lock()[i], HANDLERS[i], irq::LEVEL | irq::LOW);
+        }
+    }
 }
 
 
@@ -513,4 +549,20 @@ pub fn register_irq(intin: u8) {
         }
     }
     println!("Tried to register more than 4 IRQs to a PCI, please contact George in accounting");
+}
+
+// this is a specific interrupt handler for IRQs that correspond
+// to multiple devices (intA#, B, C, D)
+fn pci_multi_jandler(irq_num: u8)
+{
+	//printk("irq multi jandler reached by handler %d, IRQ: %d\n", irq_num,
+	//	   pci::registeredIrqs[irq_num]);
+
+	/* Find out which device raised the interrupt */
+    for i in 0..REGISTERED_DEVICES.lock()[irq_num as usize].len() {
+		if REGISTERED_DEVICES.lock()[irq_num as usize][i].was_interrupted() {
+            REGISTERED_DEVICES.lock()[irq_num as usize][i].handle_interrupt();
+        }
+	}
+	//printk("irq multi jandler has finished\n");
 }
