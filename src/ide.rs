@@ -1,6 +1,6 @@
 use crate::machine;
 use crate::thread;
-
+use crate::println;
 
 pub static ports: [u32; 2] = [0x1f0, 0x170];
 pub static ERR: u8 = 0x01;
@@ -13,6 +13,10 @@ pub static BSY: u8 = 0x80;
 pub trait IDE {
     fn read_sector(&self, sector: u32, buffer: &mut [u32]);
     fn write_sector(&self, sector: u32, buffer: &mut [u32]);
+    // Reads up to n bytes. Returns the actual number of bytes read.
+    fn read(&self, offset: u32, buffer: &mut [u32], n: u32) -> u32;
+    // Reads n bytes. Returns the number of bytes read.
+    fn read_all(&self, offset: u32, buffer: &mut [u32], n: u32) -> u32;
 }
 
 pub struct IDEImpl {
@@ -82,6 +86,55 @@ impl IDE for IDEImpl {
                 machine::outl(base, buffer[i]);
             }
         }
+    }
+
+    fn read(&self, offset: u32, buffer: &mut [u32], n: u32) -> u32 {
+        let sector = offset / IDEImpl::SECTOR_SIZE;
+        let start = offset % IDEImpl::SECTOR_SIZE;
+        let mut end = start + n;
+        if end > IDEImpl::SECTOR_SIZE {
+            end = IDEImpl::SECTOR_SIZE;
+        }
+        let count = end - start;
+        if buffer.len() * 4 < count as usize{
+            panic!("Buffer too small");
+        }
+        if count == IDEImpl::SECTOR_SIZE {
+            self.read_sector(sector, buffer);
+        } else if count != 0 {
+            let mut sector_buf: [u32; 512 / 4] = [0; 512 / 4];
+            self.read_sector(sector, &mut sector_buf);
+            let mut sector_buf_u8 = unsafe {
+                core::mem::transmute::<&mut [u32], &mut [u8]>(&mut sector_buf)
+            };
+            let mut buffer_u8 = unsafe {
+                core::mem::transmute::<&mut [u32], &mut [u8]>(buffer)
+            };
+            unsafe { core::ptr::copy(&sector_buf[start as usize] as *const u32 as *const u8, &mut buffer_u8[0] as *mut u8, count as usize); }
+        }
+        count
+    }
+
+    fn read_all(&self, offset: u32, buffer: &mut [u32], n: u32) -> u32 {
+        let mut buf_u8: &mut [u8] = unsafe {
+            core::mem::transmute::<&mut [u32], &mut [u8]>(buffer)
+        };
+        let mut temp_buf: [u32; 512 / 4] = [0; 512 / 4];
+        let mut current_offset = offset;
+        let mut bytes_remaining = n;
+        let mut index = 0;
+        while bytes_remaining > 0 {
+            let count = self.read(current_offset, &mut temp_buf, bytes_remaining);
+            let mut temp_buf_u8 = unsafe {
+                core::mem::transmute::<&mut [u32], &mut [u8]>(&mut temp_buf)
+            };
+            for i in index..index + count {
+                buf_u8[i as usize] = temp_buf_u8[i as usize];
+            }
+            index += count;
+            bytes_remaining -= count;
+        }
+        n
 
     }
 }

@@ -51,7 +51,8 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let ide = ide::IDEImpl::new(3);
     let mut buf: Box<[u32]> = box [0; 512 / 4];
     println_vga!("Reading from file...");
-    ide.read_sector(0, &mut buf);
+    //ide.read_sector(0, &mut buf);
+    ide.read(0, &mut buf, 25);
     let mut buf_u8 = unsafe {
         core::mem::transmute::<Box<[u32]>, Box<[u8]>>(buf)
     };
