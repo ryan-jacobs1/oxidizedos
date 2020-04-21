@@ -2,9 +2,6 @@
 #![cfg_attr(feature = "alloc_ref", feature(allocator_api, alloc_layout_extra))]
 #![no_std]
 
-#[cfg(test)]
-#[macro_use]
-extern crate std;
 
 #[cfg(feature = "use_spin")]
 extern crate spinning_top;
