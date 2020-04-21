@@ -1,19 +1,27 @@
+#![feature(const_fn)]
+#![cfg_attr(feature = "alloc_ref", feature(allocator_api, alloc_layout_extra))]
+#![no_std]
 
+#[cfg(test)]
+#[macro_use]
+extern crate std;
 
-
-
-extern crate spin;
+#[cfg(feature = "use_spin")]
+extern crate spinning_top;
 
 extern crate alloc;
 
-use alloc::alloc::{Alloc, AllocErr, Layout};
-use core::alloc::{GlobalAlloc};
+use alloc::alloc::Layout;
+#[cfg(feature = "alloc_ref")]
+use alloc::alloc::{AllocErr, AllocInit, AllocRef, MemoryBlock};
+use core::alloc::GlobalAlloc;
 use core::mem;
+#[cfg(feature = "use_spin")]
 use core::ops::Deref;
 use core::ptr::NonNull;
 use hole::{Hole, HoleList};
-use spin::Mutex;
-
+#[cfg(feature = "use_spin")]
+use spinning_top::Spinlock;
 pub mod isheap;
 mod hole;
 
@@ -64,7 +72,7 @@ impl Heap {
     /// This function scans the list of free memory blocks and uses the first block that is big
     /// enough. The runtime is in O(n) where n is the number of free blocks, but it should be
     /// reasonably fast for small allocations.
-    pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+    pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, ()> {
         let mut size = layout.size();
         if size < HoleList::min_size() {
             size = HoleList::min_size();
@@ -122,16 +130,83 @@ impl Heap {
     }
 }
 
-unsafe impl Alloc for Heap {
-    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
-        self.allocate_first_fit(layout)
+#[cfg(feature = "alloc_ref")]
+unsafe impl AllocRef for Heap {
+    fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+        if layout.size() == 0 {
+            return Ok(MemoryBlock {
+                ptr: layout.dangling(),
+                size: 0,
+            });
+        }
+        match self.allocate_first_fit(layout) {
+            Ok(ptr) => {
+                let block = MemoryBlock {
+                    ptr,
+                    size: layout.size(),
+                };
+                unsafe { init.init(block) };
+                Ok(block)
+            }
+            Err(()) => Err(AllocErr),
+        }
     }
 
     unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
-        self.deallocate(ptr, layout)
+        if layout.size() != 0 {
+            self.deallocate(ptr, layout);
+        }
     }
 }
 
+#[cfg(feature = "use_spin")]
+pub struct LockedHeap(Spinlock<Heap>);
+
+#[cfg(feature = "use_spin")]
+impl LockedHeap {
+    /// Creates an empty heap. All allocate calls will return `None`.
+    pub const fn empty() -> LockedHeap {
+        LockedHeap(Spinlock::new(Heap::empty()))
+    }
+
+    /// Creates a new heap with the given `bottom` and `size`. The bottom address must be valid
+    /// and the memory in the `[heap_bottom, heap_bottom + heap_size)` range must not be used for
+    /// anything else. This function is unsafe because it can cause undefined behavior if the
+    /// given address is invalid.
+    pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> LockedHeap {
+        LockedHeap(Spinlock::new(Heap {
+            bottom: heap_bottom,
+            size: heap_size,
+            holes: HoleList::new(heap_bottom, heap_size),
+        }))
+    }
+}
+
+#[cfg(feature = "use_spin")]
+impl Deref for LockedHeap {
+    type Target = Spinlock<Heap>;
+
+    fn deref(&self) -> &Spinlock<Heap> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "use_spin")]
+unsafe impl GlobalAlloc for LockedHeap {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        self.0
+            .lock()
+            .allocate_first_fit(layout)
+            .ok()
+            .map_or(0 as *mut u8, |allocation| allocation.as_ptr())
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        self.0
+            .lock()
+            .deallocate(NonNull::new_unchecked(ptr), layout)
+    }
+}
 
 /// Align downwards. Returns the greatest x with alignment `align`
 /// so that x <= addr. The alignment must be a power of 2.

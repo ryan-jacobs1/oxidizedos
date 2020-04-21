@@ -1,5 +1,5 @@
-use alloc::alloc::{AllocErr, Layout};
-use core::mem::size_of;
+use alloc::alloc::Layout;
+use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 
 use super::align_up;
@@ -23,12 +23,15 @@ impl HoleList {
     /// Creates a `HoleList` that contains the given hole. This function is unsafe because it
     /// creates a hole at the given `hole_addr`. This can cause undefined behavior if this address
     /// is invalid or if memory from the `[hole_addr, hole_addr+size) range is used somewhere else.
+    ///
+    /// The pointer to `hole_addr` is automatically aligned.
     pub unsafe fn new(hole_addr: usize, hole_size: usize) -> HoleList {
         assert!(size_of::<Hole>() == Self::min_size());
 
-        let ptr = hole_addr as *mut Hole;
+        let aligned_hole_addr = align_up(hole_addr, align_of::<Hole>());
+        let ptr = aligned_hole_addr as *mut Hole;
         ptr.write(Hole {
-            size: hole_size,
+            size: hole_size.saturating_sub(aligned_hole_addr - hole_addr),
             next: None,
         });
 
@@ -46,7 +49,7 @@ impl HoleList {
     /// block is returned.
     /// This function uses the “first fit” strategy, so it uses the first hole that is big
     /// enough. Thus the runtime is in O(n) but it should be reasonably fast for small allocations.
-    pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+    pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, ()> {
         assert!(layout.size() >= Self::min_size());
 
         allocate_first_fit(&mut self.first, layout).map(|allocation| {
@@ -189,7 +192,7 @@ fn split_hole(hole: HoleInfo, required_layout: Layout) -> Option<Allocation> {
 /// care of freeing it again.
 /// This function uses the “first fit” strategy, so it breaks as soon as a big enough hole is
 /// found (and returns it).
-fn allocate_first_fit(mut previous: &mut Hole, layout: Layout) -> Result<Allocation, AllocErr> {
+fn allocate_first_fit(mut previous: &mut Hole, layout: Layout) -> Result<Allocation, ()> {
     loop {
         let allocation: Option<Allocation> = previous
             .next
@@ -207,7 +210,7 @@ fn allocate_first_fit(mut previous: &mut Hole, layout: Layout) -> Result<Allocat
             }
             None => {
                 // this was the last hole, so no hole is big enough -> allocation not possible
-                return Err(AllocErr);
+                return Err(());
             }
         }
     }
@@ -290,6 +293,7 @@ fn deallocate(mut hole: &mut Hole, addr: usize, mut size: usize) {
                     next: hole.next.take(), // the reference to the Y block (if it exists)
                 };
                 // write the new hole to the freed memory
+                debug_assert_eq!(addr % align_of::<Hole>(), 0);
                 let ptr = addr as *mut Hole;
                 unsafe { ptr.write(new_hole) };
                 // add the F block as the next block of the X block
