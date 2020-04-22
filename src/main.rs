@@ -48,14 +48,12 @@ fn trivial_assertion() {
 #[no_mangle]
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     kernel_init(mb_config, end);
-    let ide = ide::IDEImpl::new(3);
+    let ide = ide::IDEImpl::new(1);
     let mut buf: Box<[u32]> = box [0; 512 / 4];
     println_vga!("Reading from file...");
     //ide.read_sector(0, &mut buf);
-    ide.read(0, &mut buf, 25);
-    let mut buf_u8 = unsafe {
-        core::mem::transmute::<Box<[u32]>, Box<[u8]>>(buf)
-    };
+    ide.read(0, &mut buf, 406);
+    let mut buf_u8 = box u32_as_u8_mut(&mut buf);
     let x = core::str::from_utf8(&buf_u8);
     println_vga!("{}", x.expect("uh oh"));
     println_vga!("File read complete!");
@@ -64,5 +62,11 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     machine::exit(machine::EXIT_QEMU_SUCCESS);
 }
 
-
-
+fn u32_as_u8_mut<'a>(src: &'a mut [u32]) -> &'a mut [u8] {
+    let dst = unsafe {
+        core::slice::from_raw_parts_mut(src.as_mut_ptr() as *mut u8, src.len() * 4)
+    };
+    src[0] = 1;
+    dst[0] = 2;
+    dst
+}
