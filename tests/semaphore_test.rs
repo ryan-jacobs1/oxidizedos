@@ -40,6 +40,7 @@ pub fn semaphore_test() -> ! {
     println!("Called down on semaphore!");
     sem.down();
     println!("Called down on semaphore again!");
+    machine::exit(machine::EXIT_QEMU_SUCCESS);
 }
 
 
