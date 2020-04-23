@@ -1,7 +1,7 @@
 use crate::ide::{IDEImpl, IDE};
 use crate::{println, panic};
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, vec, vec::Vec};
 
 static mut SYSTEM_INCREMENTER: u64 = 1;
 
@@ -129,6 +129,34 @@ impl SFS {
         }
         else {
             panic!("Filelength > 30 is not supported yet");
+        }
+    }
+
+    pub fn read_file(&mut self, filename: &str) -> Result<Vec<u32>, &str> {
+        let filename_u8: &[u8] = filename.as_bytes();
+        if filename_u8.len() <= 30 {
+            match self.get_file_entry(filename) {
+                Ok((file_entry, position)) => {
+                    let mut file_data: Vec<u32> = Vec::with_capacity(((file_entry.ending_block - file_entry.ending_block) * self.super_block.block_size_bytes()) as usize);
+                    for i in file_entry.starting_block..file_entry.ending_block {
+                        let mut buf: Vec<u32> = Vec::with_capacity(self.super_block.block_size_bytes() as usize);
+                        for _ in 0..self.super_block.block_size_bytes() {
+                            buf.push(0);
+                        }
+                        let readLocation = self.super_block.data_start_location() + (file_entry.starting_block * self.super_block.block_size_bytes()) + (i * self.super_block.block_size_bytes());
+                        self.ide.read(readLocation as u32, buf.as_mut_slice(), self.super_block.block_size_bytes() as u32);
+                        file_data.append(&mut buf);
+                    }
+                    file_data.resize(file_entry.length as usize / 4, 0);
+                    Ok(file_data)
+                },
+                Err(e) => {
+                    Err("File doesnt exist")
+                }
+            }
+        }
+        else {
+            Err("Filelength > 30 is not supported yet")
         }
     }
 
