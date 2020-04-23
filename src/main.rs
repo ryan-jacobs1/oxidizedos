@@ -13,6 +13,7 @@ use core::slice;
 use oxos::machine;
 use oxos::ide;
 use oxos::ide::{IDEImpl, IDE};
+use oxos::sfs;
 use oxos::{kernel_init};
 use oxos::config::mb_info;
 use oxos::{print, println, println_vga};
@@ -57,6 +58,10 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let x = core::str::from_utf8(&buf_u8);
     println_vga!("{}", x.expect("uh oh"));
     println_vga!("File read complete!");
+
+    let mut s = sfs::SFS::new(1);
+    s.print_super_block();
+    s.create_file("test", 5);
     
     loop {}
     machine::exit(machine::EXIT_QEMU_SUCCESS);
@@ -66,7 +71,5 @@ fn u32_as_u8_mut<'a>(src: &'a mut [u32]) -> &'a mut [u8] {
     let dst = unsafe {
         core::slice::from_raw_parts_mut(src.as_mut_ptr() as *mut u8, src.len() * 4)
     };
-    src[0] = 1;
-    dst[0] = 2;
     dst
 }
