@@ -1,5 +1,5 @@
 use crate::ide::{IDEImpl, IDE};
-use crate::println;
+use crate::{println, panic};
 
 use alloc::boxed::Box;
 
@@ -39,6 +39,10 @@ impl SuperBlock {
         self.total_blocks * (1 << self.block_size + 7)
     }
 
+    fn data_start_location(&self) -> u64 {
+        self.reserved_block as u64 * self.block_size_bytes()
+    }
+
     fn index_start_location(&self) -> u64 {
         self.get_media_size() - self.index_area_size
     }
@@ -76,29 +80,102 @@ impl SFS {
     pub fn create_file(&mut self, filename: &str, blocks: u64) {
         let filename_u8: &[u8] = filename.as_bytes();
         if filename_u8.len() <= 30 {
-            let mut filename_padded: [u8; 30] = [0; 30];
-            unsafe { core::ptr::copy(&filename_u8[0] as *const u8, &mut filename_padded[0] as *mut u8, filename_u8.len() as usize); }
-            // ! Check the bounds of the data area size
-            let starting_block = self.super_block.data_area_size;
-            let ending_block = starting_block + blocks;
-            let file_entry: FileEntry = FileEntry::new(&mut filename_padded, starting_block, ending_block, 0, 0);
-            let buf: &[u32] = unsafe { 
-                core::slice::from_raw_parts((&file_entry as *const FileEntry) as *const u32, 64)
-            };
-            self.ide.write(self.super_block.index_start_location() as u32, buf, 64);
-            self.move_starting_marker_entry(1);
-
-            self.super_block.increment_data_area_size(blocks);
-            self.update_super_block();
+            match self.get_file_entry(filename) {
+                Ok((file_entry, pos)) => {
+                    println!("File already exists");
+                },
+                Err(e) => {
+                    let mut filename_padded: [u8; 30] = [0; 30];
+                    unsafe { core::ptr::copy(&filename_u8[0] as *const u8, &mut filename_padded[0] as *mut u8, filename_u8.len() as usize); }
+                    // ! Check the bounds of the data area size
+                    let starting_block = self.super_block.data_area_size;
+                    let ending_block = starting_block + blocks;
+                    let file_entry: FileEntry = FileEntry::new(filename_padded, starting_block, ending_block, 0, 0);
+                    let buf: &[u32] = unsafe { 
+                        core::slice::from_raw_parts((&file_entry as *const FileEntry) as *const u32, 64)
+                    };
+                    self.ide.write(self.super_block.index_start_location() as u32, buf, 64);
+                    self.move_starting_marker_entry(1);
+        
+                    self.super_block.increment_data_area_size(blocks);
+                    self.update_super_block();
+                }
+            }
         }
         else {
-            println!("Filelength > 30 is not supported yet");
+            panic!("Filelength > 30 is not supported yet");
+        }
+    }
+
+    pub fn append_to_file(&mut self, filename: &str, content: &[u32]) {
+        let filename_u8: &[u8] = filename.as_bytes();
+        if filename_u8.len() <= 30 {
+            match self.get_file_entry(filename) {
+                Ok((file_entry, position)) => {
+                    if file_entry.length + (content.len() * 4) as u64 <= ((file_entry.ending_block - file_entry.starting_block) * self.super_block.block_size_bytes()) {
+                        let appendLocation = self.super_block.data_start_location() + (file_entry.starting_block * self.super_block.block_size_bytes()) + file_entry.length;
+                        println!("Append Location: {}", appendLocation);
+                        self.ide.write(appendLocation as u32, content, content.len() as u32 * 4);
+                        self.update_file_length(position, file_entry.length + (content.len() as u64 * 4));
+                    }
+                    else {
+                        panic!("File size too small. Cant append");
+                    }
+                },
+                Err(e) => {
+                    println!("File doesnt exist");
+                }
+            };
+        }
+        else {
+            panic!("Filelength > 30 is not supported yet");
         }
     }
 
     pub fn print_super_block(&self) {
         self.super_block.print();
         println!("{}", self.super_block.index_start_location());
+    }
+
+    fn get_file_entry(&self, filename: &str) -> Result<(FileEntry, u64), &str> {
+        let filename_u8: &[u8] = filename.as_bytes();
+        if filename_u8.len() <= 30 {
+            let mut buf: &mut [u32] = &mut [0; 64 / 4];
+            for i in (self.super_block.index_start_location()..self.get_media_size()).step_by(64) {
+                self.ide.read(i as u32, buf, 64);
+                if buf[0] & 0xFF == 0x12 {
+                    let mut buf: &mut [u8] = u32_as_u8_mut(buf);
+                    let file_entry_slice: &[FileEntry] = unsafe { 
+                        core::slice::from_raw_parts((&buf[0] as *const u8) as *const FileEntry, 64)
+                    };
+                    let mut filename_padded: [u8; 30] = [0; 30];
+                    unsafe { core::ptr::copy(&filename_u8[0] as *const u8, &mut filename_padded[0] as *mut u8, filename_u8.len() as usize); }
+                    if file_entry_slice[0].filename == filename_padded {
+                        println!("File Found!");
+                        return Ok((FileEntry::new(
+                            file_entry_slice[0].filename, 
+                            file_entry_slice[0].starting_block,
+                            file_entry_slice[0].ending_block,
+                            file_entry_slice[0].length,
+                            file_entry_slice[0].continuations     
+                        ), i))
+                    }
+                }
+            }
+            Err("Uh Oh Sisters: File not found")
+        }
+        else {
+            Err("Uh Oh Sisters: Filelength > 30 is not supported yet")
+        }
+    }
+
+    fn update_file_length(&self, file_entry_position: u64, length: u64) {
+        let length_u64: &[u64] = &[length];
+        let buf: &[u32] = unsafe {
+            core::slice::from_raw_parts(length_u64.as_ptr() as *const u32, 2)
+        };
+        let location = file_entry_position + 26;
+        self.ide.write(location as u32, buf, 8);
     }
 
     fn get_media_size(&self) -> u64 {
@@ -191,7 +268,7 @@ struct FileEntry {
 }
 
 impl FileEntry {
-    pub fn new(filename: &mut [u8; 30], starting_block: u64, ending_block: u64, length: u64, continuations: u8) -> FileEntry {
+    pub fn new(filename: [u8; 30], starting_block: u64, ending_block: u64, length: u64, continuations: u8) -> FileEntry {
         FileEntry {
             entry_type: 0x12,
             continuations: continuations,
@@ -199,7 +276,7 @@ impl FileEntry {
             starting_block: starting_block,
             ending_block: ending_block,
             length: length,
-            filename: *filename
+            filename: filename
         }
     }
 }

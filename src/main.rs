@@ -52,8 +52,7 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let ide = ide::IDEImpl::new(1);
     let mut buf: Box<[u32]> = box [0; 512 / 4];
     println_vga!("Reading from file...");
-    //ide.read_sector(0, &mut buf);
-    ide.read(0, &mut buf, 406);
+    ide.read(0, &mut buf, 404);
     let mut buf_u8 = box u32_as_u8_mut(&mut buf);
     let x = core::str::from_utf8(&buf_u8);
     println_vga!("{}", x.expect("uh oh"));
@@ -62,6 +61,10 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let mut s = sfs::SFS::new(1);
     s.print_super_block();
     s.create_file("test", 5);
+    let content = "Did it work?";
+    let content_u8: &[u8] = content.as_bytes();
+    let content_u32: &[u32] = u8_as_u32(content_u8);
+    s.append_to_file("test", content_u32);
     
     loop {}
     machine::exit(machine::EXIT_QEMU_SUCCESS);
@@ -70,6 +73,13 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
 fn u32_as_u8_mut<'a>(src: &'a mut [u32]) -> &'a mut [u8] {
     let dst = unsafe {
         core::slice::from_raw_parts_mut(src.as_mut_ptr() as *mut u8, src.len() * 4)
+    };
+    dst
+}
+
+fn u8_as_u32<'a>(src: &'a [u8]) -> &'a [u32] {
+    let dst = unsafe {
+        core::slice::from_raw_parts(src.as_ptr() as *const u32, src.len() / 4)
     };
     dst
 }
