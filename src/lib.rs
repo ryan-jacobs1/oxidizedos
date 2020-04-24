@@ -29,6 +29,7 @@ pub mod timer;
 pub mod linked_list_allocator_2;
 pub mod pci;
 pub mod ide;
+pub mod sfs;
 
 #[macro_use]
 extern crate bitfield;

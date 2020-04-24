@@ -106,12 +106,8 @@ impl IDE for IDEImpl {
         } else if count != 0 {
             let mut sector_buf: [u32; 512 / 4] = [0; 512 / 4];
             self.read_sector(sector, &mut sector_buf);
-            let mut sector_buf_u8 = unsafe {
-                core::mem::transmute::<&mut [u32], &mut [u8]>(&mut sector_buf)
-            };
-            let mut buffer_u8 = unsafe {
-                core::mem::transmute::<&mut [u32], &mut [u8]>(buffer)
-            };
+            let mut sector_buf_u8 = u32_as_u8_mut(&mut sector_buf);
+            let mut buffer_u8 = u32_as_u8_mut(buffer);
             unsafe { core::ptr::copy(&sector_buf_u8[start as usize] as *const u8, &mut buffer_u8[0] as *mut u8, count as usize); }
         }
         count
@@ -152,12 +148,8 @@ impl IDE for IDEImpl {
         } else if count != 0 {
             let mut temp_buf: [u32; 512 / 4] = [0; 512 / 4];
             self.read_sector(sector, &mut temp_buf);
-            let mut temp_buf_u8 = unsafe {
-                core::mem::transmute::<&mut [u32], &mut [u8]>(&mut temp_buf)
-            };
-            let buffer_u8 = unsafe {
-                core::mem::transmute::<&[u32], &[u8]>(buffer)
-            };
+            let mut temp_buf_u8 = u32_as_u8_mut(&mut temp_buf);
+            let buffer_u8 = u32_as_u8(buffer);
             unsafe {core::ptr::copy(&buffer_u8[0] as *const u8, &mut temp_buf_u8[start as usize] as *mut u8, count as usize);}
             self.write_sector(sector, &temp_buf);
         }
@@ -223,4 +215,18 @@ fn wait_for_drive(drive: u32) {
     while (get_status(drive) & BSY) != 0 {
         thread::surrender();
     }
+}
+
+fn u32_as_u8_mut<'a>(src: &'a mut [u32]) -> &'a mut [u8] {
+    let dst = unsafe {
+        core::slice::from_raw_parts_mut(src.as_mut_ptr() as *mut u8, src.len() * 4)
+    };
+    dst
+}
+
+fn u32_as_u8<'a>(src: &'a [u32]) -> &'a [u8] {
+    let dst = unsafe {
+        core::slice::from_raw_parts(src.as_ptr() as *mut u8, src.len() * 4)
+    };
+    dst
 }
