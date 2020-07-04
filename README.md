@@ -14,3 +14,6 @@ halogen run
 
 # To run the tests  
 cargo xtest  
+
+# Blog
+I blog about the development [here](https://ryan-jacobs1.github.io/)
