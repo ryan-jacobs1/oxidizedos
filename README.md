@@ -16,4 +16,4 @@ halogen run
 cargo xtest  
 
 # Blog
-I blog about the development [here](https://ryan-jacobs1.github.io/)
+I blog about the development of OxidizedOS [here](https://ryan-jacobs1.github.io/).
