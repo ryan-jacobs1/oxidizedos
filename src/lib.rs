@@ -26,10 +26,10 @@ pub mod thread;
 pub mod semaphore;
 pub mod spinlock;
 pub mod timer;
-pub mod linked_list_allocator_2;
 pub mod pci;
 pub mod ide;
 pub mod sfs;
+pub mod isheap;
 
 #[macro_use]
 extern crate bitfield;
@@ -48,9 +48,7 @@ use u8250::U8250;
 use config::mb_info;
 use config::CONFIG;
 use heap::{Heap, Block};
-//use heap::LockedHeap;
-use linked_list_allocator::LockedHeap;
-use linked_list_allocator_2::isheap::ISHeap;
+use isheap::ISHeap;
 use thread::TCBImpl;
 use alloc::sync::Arc;
 
@@ -171,7 +169,7 @@ pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) {
     pci::check_all_buses();
     unsafe {
         //ALLOCATOR.init(0x200000, 0x800000);
-        ALLOCATOR.lock().init(0x200000, 0x800000);
+        ALLOCATOR.init(0x200000, 0x800000);
     }
     thread::init();
     timer::calibrate(1000);

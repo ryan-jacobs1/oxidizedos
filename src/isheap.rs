@@ -1,5 +1,7 @@
-use crate::linked_list_allocator_2::Heap;
-use crate::linked_list_allocator_2::hole::{Hole, HoleList};
+#[macro_use]
+use crate::println;
+
+use linked_list_allocator::Heap;
 use crate::ismutex::ISMutex;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ops::Deref;
@@ -20,11 +22,12 @@ impl ISHeap {
     /// anything else. This function is unsafe because it can cause undefined behavior if the
     /// given address is invalid.
     pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> ISHeap {
-        ISHeap(ISMutex::new(Heap {
-            bottom: heap_bottom,
-            size: heap_size,
-            holes: HoleList::new(heap_bottom, heap_size),
-        }))
+        ISHeap(ISMutex::new(Heap::new(heap_bottom, heap_size)))
+    }
+
+    pub unsafe fn init(&self, heap_bottom: usize, heap_size: usize) {
+	self.0.lock().init(heap_bottom, heap_size);
+	println!("initialized the ISHeap");
     }
 }
 
