@@ -1,8 +1,8 @@
-use core::sync::atomic::AtomicPtr;
-use core::sync::atomic::Ordering;
 use crate::config::CONFIG;
 use crate::machine;
 use crate::println;
+use core::sync::atomic::AtomicPtr;
+use core::sync::atomic::Ordering;
 
 pub static mut LAPIC: Option<SMP> = None;
 
@@ -49,7 +49,6 @@ pub fn init_ap() {
     unsafe {
         if let Some(ref lapic) = LAPIC {
             let x = &mut 0x1ff;
-            //lapic.spurious.store(x, Ordering::SeqCst);
             core::ptr::write_volatile(0xfee000f0 as *mut u32, 0x1ff);
         }
         // Disable PIC
@@ -58,29 +57,15 @@ pub fn init_ap() {
 
         // Enable LAPIC
         let msr_val = machine::rdmsr(SMP::MSR);
-        //println!("msr {:x}", msr_val);
         let to_write = msr_val | (SMP::ENABLE as u64);
-        //println!("writing {:x}", to_write);
+
         machine::wrmsr(msr_val | (SMP::ENABLE as u64), SMP::MSR);
-        //println!("reread msr {:x}", machine::rdmsr(SMP::MSR));
-        
     }
 }
 
 pub fn me() -> usize {
     unsafe {
-        /*
-        if let Some(ref lapic) = LAPIC {
-            let result = lapic.id.load(Ordering::SeqCst);
-            println!("result: {}", *result);
-            (*(result) >> 24)
-        }
-        else {
-            panic!("smp::me() failed");
-        }
-        */
         let result = core::ptr::read_volatile(0xfee00020 as *const u32);
-        //println!("result {}", result);
         (result >> 24) as usize
     }
 }
@@ -89,23 +74,14 @@ pub fn ipi(id: u32, mut num: u32) {
     let lapic = unsafe {
         match LAPIC {
             Some(ref x) => x,
-            None => panic!("No LAPIC, unable to send IPI")
+            None => panic!("No LAPIC, unable to send IPI"),
         }
     };
     unsafe {
-    //println!("num 0x{:x}", num);
-    let mut id_shifted = id << 24;
-    //println!("id {} storing {:b}", id, id_shifted);
-    core::ptr::write_volatile(0xfee00310 as *mut u32, id_shifted);
-    //lapic.icr_high.store(&mut id_shifted as *mut u32, Ordering::SeqCst);
-    //let x = lapic.icr_high.load(Ordering::SeqCst);
-    //println!("stored {:b}", unsafe{*x});
-    //println!("sending ipi {:b}", num);
-    //lapic.icr_low.store(&mut num, Ordering::SeqCst);
-    core::ptr::write_volatile(0xfee00300 as *mut u32, num);
-    unsafe {
-        //while (*(lapic.icr_low.load(Ordering::SeqCst)) & (1 << 12)) != 0 {}
-    }
+        let mut id_shifted = id << 24;
 
-}
+        core::ptr::write_volatile(0xfee00310 as *mut u32, id_shifted);
+
+        core::ptr::write_volatile(0xfee00300 as *mut u32, num);
+    }
 }
