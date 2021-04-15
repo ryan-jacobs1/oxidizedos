@@ -1,13 +1,13 @@
 extern crate spin;
 
+use crate::ismutex::ISMutex;
 use crate::machine;
 use core::fmt;
 use spin::Mutex;
-use crate::ismutex::ISMutex;
 
 pub struct U8250 {}
 
-static mut WRITER: ISMutex<U8250> = ISMutex::new(U8250{});
+static mut WRITER: ISMutex<U8250> = ISMutex::new(U8250 {});
 
 impl U8250 {
     const COM_PORT: u32 = 0x3F8;

@@ -1,17 +1,17 @@
 use crate::machine;
 use crate::println;
-use crate::Stack;
 use crate::BoxedStack;
+use crate::Stack;
 use alloc::boxed::Box;
 
+use crate::config::CONFIG;
+use crate::ismutex::ISMutex;
 use crate::smp;
 use alloc::collections::VecDeque;
-use crate::config::CONFIG;
-use core::mem::MaybeUninit;
-use spin::Mutex;
 use core::borrow::BorrowMut;
 use core::marker::{Send, Sync};
-use crate::ismutex::ISMutex;
+use core::mem::MaybeUninit;
+use spin::Mutex;
 
 lazy_static! {
     pub static ref READY: ISMutex<VecDeque<Box<dyn TCB>>> = ISMutex::new(VecDeque::new());
@@ -50,7 +50,6 @@ pub fn swap_active(swap_to: Option<Box<dyn TCB>>) -> Option<Box<dyn TCB>> {
     result
 }
 
-
 pub trait TCB: Send + Sync {
     fn get_info(&mut self) -> *mut TCBInfo;
     fn get_work(&mut self) -> Box<'static + FnOnce() + Send + Sync>;
@@ -72,7 +71,7 @@ impl BootstrapTCB {
     pub fn new_box() -> Box<BootstrapTCB> {
         box BootstrapTCB {
             tcb_info: TCBInfo::new(0),
-            stack_frame_start: None
+            stack_frame_start: None,
         }
     }
 }
@@ -122,7 +121,7 @@ impl TCBImpl {
         stack[index - 1] = 0; // CR2
         let stack_ptr = Box::into_raw(stack);
         let stack_ptr_as_usize = stack_ptr as *mut u64 as usize;
-        stack = unsafe {Box::from_raw(stack_ptr)};
+        stack = unsafe { Box::from_raw(stack_ptr) };
         let stack_ptr_start = stack_ptr_as_usize + ((index - 1) * core::mem::size_of::<usize>());
         let tcb_info = TCBInfo::new(stack_ptr_start);
         TCBImpl {
@@ -143,13 +142,10 @@ impl TCB for TCBImpl {
         core::mem::swap(&mut work, &mut self.work);
         match work {
             Some(task) => task,
-            None => panic!("TCBImpl had no work!")
+            None => panic!("TCBImpl had no work!"),
         }
     }
 }
-
-
-
 
 type Cleanup = FnOnce() + Send + Sync;
 
@@ -161,7 +157,9 @@ pub struct TaskHolder {
 
 impl TaskHolder {
     pub fn new() -> TaskHolder {
-        TaskHolder {tasks: VecDeque::new()}
+        TaskHolder {
+            tasks: VecDeque::new(),
+        }
     }
     pub fn add_task(&mut self, task: Box<Cleanup>) {
         self.tasks.push_back(task);
@@ -225,13 +223,13 @@ fn surrender_help(run_again: bool, back_out: bool) {
     // Not a race condition as we double check later on
     if back_out {
         if READY.lock().is_empty() {
-            return
+            return;
         }
     }
     // If there's no active thread, return as we are currently surrendering
     let mut current_thread: Box<dyn TCB> = match swap_active(None) {
-        Some(mut tcb) => {tcb},
-        None => {return}
+        Some(mut tcb) => tcb,
+        None => return,
     };
     // Don't need to disable interrupts, as we will run on this core until we context switch
     let me = smp::me();
@@ -258,9 +256,7 @@ pub fn block(current_thread_info: *mut TCBInfo) {
         None => {
             // Implementation Note: Potentially a trade off to switch to something that switches back,
             // but most of the time, there should be something in the ready q
-            let work = move || {
-                return
-            };
+            let work = move || return;
             let busy_work = Box::new(TCBImpl::new(Box::new(work)));
             busy_work
         }
@@ -270,10 +266,10 @@ pub fn block(current_thread_info: *mut TCBInfo) {
         // The next thread will now assert itself as the active thread
         swap_active(Some(next_thread));
     };
-    CLEANUP[smp::me()].lock().add_task(Box::new(assert_as_active));
-    unsafe {
-        machine::context_switch(current_thread_info, next_thread_info)
-    }
+    CLEANUP[smp::me()]
+        .lock()
+        .add_task(Box::new(assert_as_active));
+    unsafe { machine::context_switch(current_thread_info, next_thread_info) }
     cleanup();
 }
 
@@ -284,8 +280,8 @@ fn cleanup() {
     machine::enable(was);
     loop {
         match cleanup_work.get_task() {
-            Some(work) => {work()},
-            None => {break}
+            Some(work) => work(),
+            None => break,
         }
     }
 }

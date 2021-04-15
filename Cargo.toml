@@ -15,7 +15,7 @@ panic = "abort"
 [dependencies]
 spin = "0.5.2"
 bitfield = "0.13.2"
-linked_list_allocator = "0.8.2"
+linked_list_allocator = "0.8"
 volatile = "0.2.6"
 
 

@@ -1,6 +1,6 @@
+use crate::machine;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
-use crate::machine;
 
 pub struct SpinLock {
     taken: AtomicBool,
@@ -8,7 +8,9 @@ pub struct SpinLock {
 
 impl SpinLock {
     pub const fn new() -> SpinLock {
-        SpinLock {taken: AtomicBool::new(false)}
+        SpinLock {
+            taken: AtomicBool::new(false),
+        }
     }
     pub fn lock(&self) -> bool {
         let mut was = machine::disable();

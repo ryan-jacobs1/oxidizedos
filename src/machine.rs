@@ -1,5 +1,5 @@
-use crate::thread::TCBInfo;
 use crate::println;
+use crate::thread::TCBInfo;
 
 pub static EXIT_QEMU_SUCCESS: u32 = 5;
 pub static EXIT_QEMU_FAILURE: u32 = 3;
@@ -48,7 +48,7 @@ pub fn enable(was_enabled: bool) {
 }
 
 pub fn are_interrupts_enabled() -> bool {
-    let flags = unsafe {get_flags()};
+    let flags = unsafe { get_flags() };
     (flags & (1 << 9)) > 0
 }
 

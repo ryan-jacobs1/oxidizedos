@@ -7,20 +7,18 @@
 
 extern crate alloc;
 
-use core::str;
 use core::slice;
+use core::str;
 
-use oxos::machine;
+use oxos::config::mb_info;
 use oxos::ide;
 use oxos::ide::{IDEImpl, IDE};
+use oxos::kernel_init;
+use oxos::machine;
 use oxos::sfs;
-use oxos::{kernel_init};
-use oxos::config::mb_info;
 use oxos::{print, println, println_vga};
 
 use alloc::{boxed::Box, vec, vec::Vec};
-
-
 
 #[cfg(test)]
 #[no_mangle]
@@ -70,28 +68,23 @@ pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
     let read_contents_str = core::str::from_utf8(&read_contents_u8);
     println_vga!("{}", read_contents_str.expect("uh oh"));
     println_vga!("File read complete!");
-    
-    loop {}
+
+    // loop {}
     machine::exit(machine::EXIT_QEMU_SUCCESS);
 }
 
 fn u32_as_u8_mut<'a>(src: &'a mut [u32]) -> &'a mut [u8] {
-    let dst = unsafe {
-        core::slice::from_raw_parts_mut(src.as_mut_ptr() as *mut u8, src.len() * 4)
-    };
+    let dst =
+        unsafe { core::slice::from_raw_parts_mut(src.as_mut_ptr() as *mut u8, src.len() * 4) };
     dst
 }
 
 fn u8_as_u32<'a>(src: &'a [u8]) -> &'a [u32] {
-    let dst = unsafe {
-        core::slice::from_raw_parts(src.as_ptr() as *const u32, src.len() / 4)
-    };
+    let dst = unsafe { core::slice::from_raw_parts(src.as_ptr() as *const u32, src.len() / 4) };
     dst
 }
 
 fn u32_as_u8<'a>(src: &'a [u32]) -> &'a [u8] {
-    let dst = unsafe {
-        core::slice::from_raw_parts(src.as_ptr() as *mut u8, src.len() * 4)
-    };
+    let dst = unsafe { core::slice::from_raw_parts(src.as_ptr() as *mut u8, src.len() * 4) };
     dst
 }

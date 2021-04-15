@@ -1,12 +1,11 @@
 #[macro_use]
 use crate::println;
 
-use linked_list_allocator::Heap;
 use crate::ismutex::ISMutex;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ops::Deref;
 use core::ptr::NonNull;
-
+use linked_list_allocator::Heap;
 
 /// A wrapper around Phil Opp's Heap to that uses an interrupt-safe Mutex
 pub struct ISHeap(ISMutex<Heap>);
@@ -26,8 +25,8 @@ impl ISHeap {
     }
 
     pub unsafe fn init(&self, heap_bottom: usize, heap_size: usize) {
-	self.0.lock().init(heap_bottom, heap_size);
-	println!("initialized the ISHeap");
+        self.0.lock().init(heap_bottom, heap_size);
+        println!("initialized the ISHeap");
     }
 }
 

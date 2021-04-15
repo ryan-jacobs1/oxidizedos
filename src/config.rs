@@ -101,7 +101,9 @@ pub struct ACPIHeader {
 
 impl ACPIHeader {
     pub fn print(&self) {
-        unsafe {println!("ACPIHeader: signature: {} length {} revision {} checksum {} oemid {} oemtableid {} oemrevision {} creator_id {} creator_revision {}", from_utf8(&self.signature).unwrap(), self.length, self.revision, self.checksum, from_utf8(&self.oemid).unwrap(), from_utf8(&self.oemtableid).unwrap(), self.oemrevision, self.creator_id, self.creator_revision);}
+        unsafe {
+            println!("ACPIHeader: signature: {} length {} revision {} checksum {} oemid {} oemtableid {} oemrevision {} creator_id {} creator_revision {}", from_utf8(&self.signature).unwrap(), self.length, self.revision, self.checksum, from_utf8(&self.oemid).unwrap(), from_utf8(&self.oemtableid).unwrap(), self.oemrevision, self.creator_id, self.creator_revision);
+        }
     }
     pub fn find_sdt(&self, signature: &[u8]) -> Result<&ACPIHeader, ()> {
         let num_entries = (self.length as usize - core::mem::size_of::<ACPIHeader>()) / 4;

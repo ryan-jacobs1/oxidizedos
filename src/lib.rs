@@ -10,26 +10,23 @@
 #![reexport_test_harness_main = "test_main"]
 #![test_runner(crate::test_runner)]
 
-
-
-
+pub mod config;
+pub mod heap;
+pub mod ide;
+pub mod idt;
+pub mod isheap;
 pub mod ismutex;
 pub mod machine;
-pub mod u8250;
-pub mod config;
-pub mod vga_buffer;
-pub mod heap;
-pub mod vmm;
-pub mod smp;
-pub mod idt;
-pub mod thread;
-pub mod semaphore;
-pub mod spinlock;
-pub mod timer;
 pub mod pci;
-pub mod ide;
+pub mod semaphore;
 pub mod sfs;
-pub mod isheap;
+pub mod smp;
+pub mod spinlock;
+pub mod thread;
+pub mod timer;
+pub mod u8250;
+pub mod vga_buffer;
+pub mod vmm;
 
 #[macro_use]
 extern crate bitfield;
@@ -40,18 +37,17 @@ extern crate linked_list_allocator;
 
 use alloc::{boxed::Box, vec, vec::Vec};
 
-use core::fmt::Write; 
+use core::fmt::Write;
 use core::panic::PanicInfo;
-use core::sync::atomic::{AtomicUsize, Ordering, AtomicU32};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
-use u8250::U8250;
+use alloc::sync::Arc;
 use config::mb_info;
 use config::CONFIG;
-use heap::{Heap, Block};
+use heap::{Block, Heap};
 use isheap::ISHeap;
 use thread::TCBImpl;
-use alloc::sync::Arc;
-
+use u8250::U8250;
 
 static HELLO: &[u8] = b"Off to the races!\n";
 
@@ -80,20 +76,22 @@ pub struct Stack {
 
 impl Stack {
     pub const fn new() -> Stack {
-        Stack {stack: [0; 2048]}
+        Stack { stack: [0; 2048] }
     }
     pub fn boxed_new() -> Box<Stack> {
-        box Stack {stack: [0; 2048]}
+        box Stack { stack: [0; 2048] }
     }
 }
 
 pub struct BoxedStack {
-    pub stack: Option<Box<[u64]>>
+    pub stack: Option<Box<[u64]>>,
 }
 
 impl BoxedStack {
     pub fn new() -> BoxedStack {
-        BoxedStack {stack: Some(box [0; 512])}
+        BoxedStack {
+            stack: Some(box [0; 512]),
+        }
     }
 }
 
@@ -123,7 +121,7 @@ pub extern "C" fn _ap_start() -> ! {
     let me = smp::me();
     println!("AP {} reached _ap_start", me);
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
-    let num_cores = unsafe {CONFIG.total_procs};
+    let num_cores = unsafe { CONFIG.total_procs };
 
     while CORES_ACTIVE.load(Ordering::SeqCst) < num_cores {}
     loop {
@@ -134,7 +132,7 @@ pub extern "C" fn _ap_start() -> ! {
 
 #[no_mangle]
 pub extern "C" fn pick_stack() -> usize {
-    let stack = unsafe {(&STACK as *const Stack as usize) + ((2048 * 8) - 8)};
+    let stack = unsafe { (&STACK as *const Stack as usize) + ((2048 * 8) - 8) };
     println!("called pick_stack {:x}", stack);
     stack
 }
@@ -149,7 +147,9 @@ pub extern "C" fn ap_pick_stack() -> usize {
 #[no_mangle]
 pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) {
     CORES_ACTIVE.fetch_add(1, Ordering::SeqCst);
-    println!("the kernel stack is at {:x}", unsafe {&STACK as *const Stack as usize});
+    println!("the kernel stack is at {:x}", unsafe {
+        &STACK as *const Stack as usize
+    });
     println!("mb_config at {:x}", mb_config as *const mb_info as usize);
     //let rsp = unsafe{machine::get_rsp()};
     //println!("rsp at {:x}", rsp);
@@ -174,12 +174,12 @@ pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) {
     thread::init();
     timer::calibrate(1000);
     timer::init();
-    
+
     let reset_eip = machine::ap_entry as *const () as u32;
     println!("reset eip 0x{:x}", reset_eip);
     println!("Booting up other cores...");
-    let num_cores = unsafe {CONFIG.total_procs};
-    
+    let num_cores = unsafe { CONFIG.total_procs };
+
     for i in 1..num_cores {
         // First allocate a kernel stack
         // TODO: Put info about bootstrap stacks in a Bootstrap TCB
@@ -208,4 +208,3 @@ fn panic(_info: &PanicInfo) -> ! {
 fn alloc_panic(layout: alloc::alloc::Layout) -> ! {
     panic!("Core {}: Failure in alloc\n", smp::me());
 }
-

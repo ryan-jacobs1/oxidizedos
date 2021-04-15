@@ -1,7 +1,7 @@
-use crate::smp;
+use crate::idt;
 use crate::machine;
 use crate::println;
-use crate::idt;
+use crate::smp;
 use crate::thread;
 use core::sync::atomic::Ordering;
 
@@ -14,7 +14,7 @@ pub fn calibrate(hz: u32) {
     let lapic = unsafe {
         match &smp::LAPIC {
             Some(lapic) => lapic,
-            None => panic!("No LAPIC available")
+            None => panic!("No LAPIC available"),
         }
     };
     let d = PIT_FREQ / 20;
@@ -28,17 +28,17 @@ pub fn calibrate(hz: u32) {
         machine::outb(0x42, d);
         machine::outb(0x42, d >> 8);
     }
-    let mut last = unsafe {machine::inb(0x61) & 0x20};
+    let mut last = unsafe { machine::inb(0x61) & 0x20 };
     let mut changes = 0;
 
     while changes < 40 {
-        let t = unsafe {machine::inb(0x61) & 0x20};
+        let t = unsafe { machine::inb(0x61) & 0x20 };
         if t != last {
             changes += 1;
             last = t;
         }
     }
-    let current_count = unsafe {core::ptr::read_volatile(lapic.apit_current_count)};
+    let current_count = unsafe { core::ptr::read_volatile(lapic.apit_current_count) };
     println!("current count {:x}", current_count);
     let diff = initial - current_count;
     unsafe {
@@ -58,20 +58,23 @@ pub fn init() {
     let lapic = unsafe {
         match &smp::LAPIC {
             Some(lapic) => lapic,
-            None => panic!("No LAPIC available")
+            None => panic!("No LAPIC available"),
         }
     };
     let counter = unsafe {
         match APIT_counter {
             Some(counter) => counter,
-            None => panic!("APIT not initialized")
+            None => panic!("APIT not initialized"),
         }
     };
     unsafe {
         core::ptr::write_volatile(lapic.apit_divide, 0x0000000B);
-        core::ptr::write_volatile(lapic.apit_lvt_timer, (1 << 17) | (0 << 16) | (APIT_vector as u32));
+        core::ptr::write_volatile(
+            lapic.apit_lvt_timer,
+            (1 << 17) | (0 << 16) | (APIT_vector as u32),
+        );
         core::ptr::write_volatile(lapic.apit_initial_count, counter);
-    }   
+    }
 }
 
 #[no_mangle]
@@ -80,7 +83,7 @@ pub extern "C" fn apit_handler() {
     let lapic = unsafe {
         match &smp::LAPIC {
             Some(lapic) => lapic,
-            None => panic!("No LAPIC available")
+            None => panic!("No LAPIC available"),
         }
     };
     unsafe {

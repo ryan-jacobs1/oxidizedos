@@ -1,6 +1,6 @@
-use volatile::Volatile;
 use core::fmt;
 use lazy_static::lazy_static;
+use volatile::Volatile;
 
 use crate::ismutex::ISMutex;
 
@@ -117,10 +117,10 @@ impl Writer {
         for row in 1..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
                 let character = self.buffer.chars[row][col].read();
-                self.buffer.chars[row-1][col].write(character);
+                self.buffer.chars[row - 1][col].write(character);
             }
         }
-        self.clear_row(BUFFER_HEIGHT-1);
+        self.clear_row(BUFFER_HEIGHT - 1);
         self.column_position = 0;
     }
 

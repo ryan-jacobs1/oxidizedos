@@ -1,10 +1,8 @@
 extern crate spin;
 
-
 use spin::Mutex;
 
 use alloc::alloc::{GlobalAlloc, Layout};
-
 
 pub struct Heap {
     head: usize,
@@ -14,7 +12,6 @@ pub struct Heap {
 pub struct LockedHeap {
     heap: Mutex<Heap>,
 }
-
 
 pub struct Block {
     is_free: bool,
@@ -34,9 +31,10 @@ impl Block {
         if self.is_free && size <= self.size {
             unsafe {
                 if size + OVERHEAD_SIZE + core::mem::size_of::<usize>() <= self.size {
-                    let new_block_addr = ((self as *mut Block) as usize + OVERHEAD_SIZE + size) as *mut Block;
-                    *new_block_addr = Block { 
-                        is_free: true, 
+                    let new_block_addr =
+                        ((self as *mut Block) as usize + OVERHEAD_SIZE + size) as *mut Block;
+                    *new_block_addr = Block {
+                        is_free: true,
                         size: self.size - size - OVERHEAD_SIZE,
                         prev_block_size: size + OVERHEAD_SIZE,
                     };
@@ -45,16 +43,16 @@ impl Block {
                 }
 
                 (*self).is_free = false;
-                (*(((self as *mut Block) as usize + OVERHEAD_SIZE + offset - 8) as *mut usize)) = (self as *mut Block) as usize;
+                (*(((self as *mut Block) as usize + OVERHEAD_SIZE + offset - 8) as *mut usize)) =
+                    (self as *mut Block) as usize;
                 ((self as *mut Block) as usize + OVERHEAD_SIZE + offset) as *mut usize
             }
-        }
-        else {
-            let next_block_addr = (self as *mut Block as usize + (self.size + OVERHEAD_SIZE) as usize) as *mut Block;
+        } else {
+            let next_block_addr =
+                (self as *mut Block as usize + (self.size + OVERHEAD_SIZE) as usize) as *mut Block;
             if next_block_addr != last_block_addr {
                 unsafe { (*next_block_addr).find_free_mem(layout, last_block_addr) }
-            }
-            else {
+            } else {
                 panic!("Uh Oh Sisters: Out Of Memory!!! :(");
             }
         }
@@ -64,26 +62,32 @@ impl Block {
         self.is_free = true;
         self.coalesce(last_block_addr);
     }
-    
+
     fn coalesce(&mut self, last_block_addr: *mut Block) {
         unsafe {
-            let prev_block_addr = (self as *mut Block as usize - self.prev_block_size) as *mut Block;
-            let next_block_addr = (self as *mut Block as usize + (self.size + OVERHEAD_SIZE) as usize) as *mut Block;
-            let next_next_block_addr = (next_block_addr as usize + (*next_block_addr).size + OVERHEAD_SIZE) as *mut Block;
+            let prev_block_addr =
+                (self as *mut Block as usize - self.prev_block_size) as *mut Block;
+            let next_block_addr =
+                (self as *mut Block as usize + (self.size + OVERHEAD_SIZE) as usize) as *mut Block;
+            let next_next_block_addr =
+                (next_block_addr as usize + (*next_block_addr).size + OVERHEAD_SIZE) as *mut Block;
 
             if self.prev_block_size != 0 && (*prev_block_addr).is_free {
                 (*prev_block_addr).size += self.size + OVERHEAD_SIZE;
-                (*next_block_addr).prev_block_size = (*prev_block_addr).size + OVERHEAD_SIZE; // Must update next block's previous size to allow for future coalensces
+                (*next_block_addr).prev_block_size = (*prev_block_addr).size + OVERHEAD_SIZE;
+                // Must update next block's previous size to allow for future coalensces
             }
 
-            if next_block_addr != last_block_addr && (*next_block_addr).is_free  {
-                if self.prev_block_size != 0 && (*prev_block_addr).is_free {            // If the previous block was coalesced, we must update the address size instead of self
+            if next_block_addr != last_block_addr && (*next_block_addr).is_free {
+                if self.prev_block_size != 0 && (*prev_block_addr).is_free {
+                    // If the previous block was coalesced, we must update the address size instead of self
                     (*prev_block_addr).size += (*next_block_addr).size + OVERHEAD_SIZE;
                     if next_next_block_addr != last_block_addr {
-                        (*next_next_block_addr).prev_block_size = (*prev_block_addr).size + OVERHEAD_SIZE;
+                        (*next_next_block_addr).prev_block_size =
+                            (*prev_block_addr).size + OVERHEAD_SIZE;
                     }
-                }
-                else {                                                                  // If only self and next are coalesced, update self size and next_next prev size
+                } else {
+                    // If only self and next are coalesced, update self size and next_next prev size
                     self.size += (*next_block_addr).size + OVERHEAD_SIZE;
                     if next_next_block_addr != last_block_addr {
                         (*next_next_block_addr).prev_block_size = self.size + OVERHEAD_SIZE;
@@ -113,13 +117,16 @@ unsafe impl core::marker::Send for Block {}
 
 impl Heap {
     pub const fn new() -> Self {
-        Self {head: 0 as usize, size: 0 as usize}
+        Self {
+            head: 0 as usize,
+            size: 0 as usize,
+        }
     }
     pub fn init(&mut self, addr: usize, size: usize) {
         unsafe {
             let head = addr as *mut Block;
             *head = Block {
-                is_free: true, 
+                is_free: true,
                 size: size - OVERHEAD_SIZE,
                 prev_block_size: 0,
             };
@@ -132,7 +139,7 @@ impl Heap {
 impl LockedHeap {
     pub const fn new() -> Self {
         let heap = spin::Mutex::new(Heap::new());
-        Self {heap}
+        Self { heap }
     }
     pub fn init(&mut self, addr: usize, size: usize) {
         let mut heap = self.heap.lock();

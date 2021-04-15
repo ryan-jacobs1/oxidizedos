@@ -2,13 +2,15 @@ use crate::machine;
 use crate::println;
 
 pub static mut IDT: IDT = IDT::new();
-pub static mut IDTRECORD: IDTRecord = IDTRecord {limit: 0, idt_addr: 0};
+pub static mut IDTRECORD: IDTRecord = IDTRecord {
+    limit: 0,
+    idt_addr: 0,
+};
 
 #[no_mangle]
 pub extern "C" fn interrupt_test() {
     println!("got interrupted!");
 }
-
 
 #[repr(C, align(4096))]
 pub struct IDT {
@@ -17,20 +19,22 @@ pub struct IDT {
 
 impl IDT {
     pub const fn new() -> IDT {
-        IDT {entries: [IDTEntryWrapper::new(); 256]}
+        IDT {
+            entries: [IDTEntryWrapper::new(); 256],
+        }
     }
 }
 
 #[repr(C, packed)]
 pub struct IDTRecord {
     limit: u16,
-    idt_addr: u64
+    idt_addr: u64,
 }
 
 pub fn init() {
     let limit: u16 = core::mem::size_of::<IDT>() as u16 - 1;
-    let idt_addr: u64 = unsafe {&IDT as *const IDT as u64};
-    let idt_record_ptr: u64 = unsafe {&IDTRECORD as *const IDTRecord as u64};
+    let idt_addr: u64 = unsafe { &IDT as *const IDT as u64 };
+    let idt_record_ptr: u64 = unsafe { &IDTRECORD as *const IDTRecord as u64 };
     unsafe {
         IDTRECORD.limit = limit;
         IDTRECORD.idt_addr = idt_addr;
@@ -39,7 +43,7 @@ pub fn init() {
 }
 
 pub fn init_ap() {
-    let idt_record_ptr: u64 = unsafe {&IDTRECORD as *const IDTRecord as u64};
+    let idt_record_ptr: u64 = unsafe { &IDTRECORD as *const IDTRecord as u64 };
     unsafe {
         machine::lidt(idt_record_ptr);
     }
@@ -48,12 +52,18 @@ pub fn init_ap() {
 pub fn interrupt(index: usize, handler: unsafe extern "C" fn()) {
     let mut idt_entry = IDTEntryWrapper::new();
     let ptr = handler as *const () as u64;
-    let handler_canonical = InterruptHandlerCanonicalForm{0: ptr};
-    idt_entry.entry.set_offset_low_bits(handler_canonical.low_bits());
+    let handler_canonical = InterruptHandlerCanonicalForm { 0: ptr };
+    idt_entry
+        .entry
+        .set_offset_low_bits(handler_canonical.low_bits());
     idt_entry.entry.set_selector(8);
     idt_entry.entry.set_type_and_attributes(0x8E);
-    idt_entry.entry.set_offset_middle_bits(handler_canonical.middle_bits());
-    idt_entry.entry.set_offset_high_bits(handler_canonical.high_bits());
+    idt_entry
+        .entry
+        .set_offset_middle_bits(handler_canonical.middle_bits());
+    idt_entry
+        .entry
+        .set_offset_high_bits(handler_canonical.high_bits());
     unsafe {
         IDT.entries[index] = idt_entry;
     }
@@ -65,7 +75,7 @@ bitfield! {
     u64;
     low_bits, set_low_bits: 15, 0;
     middle_bits, set_middle_bits: 31, 16;
-    high_bits, set_high_bits: 63, 32;   
+    high_bits, set_high_bits: 63, 32;
 }
 
 #[derive(Clone, Copy)]
@@ -76,7 +86,9 @@ struct IDTEntryWrapper {
 
 impl IDTEntryWrapper {
     pub const fn new() -> IDTEntryWrapper {
-        IDTEntryWrapper {entry: IDTEntry([0; 16])}
+        IDTEntryWrapper {
+            entry: IDTEntry([0; 16]),
+        }
     }
 }
 

@@ -7,22 +7,20 @@
 
 extern crate alloc;
 
-
-use oxos::machine;
-use oxos::{kernel_init};
 use oxos::config::mb_info;
-use oxos::{print, println};
-use oxos::thread::{TCBImpl};
-use oxos::thread;
+use oxos::kernel_init;
+use oxos::machine;
 use oxos::semaphore::Semaphore;
+use oxos::thread;
+use oxos::thread::TCBImpl;
+use oxos::{print, println};
 
-use core::sync::atomic::{AtomicU32, Ordering};
 use alloc::sync::Arc;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 fn test_runner(tests: &[&dyn Fn()]) {
     unimplemented!("test_runner not used so should never be called");
 }
-
 
 #[no_mangle]
 pub extern "C" fn _start(mb_config: &mb_info, end: u64) -> ! {
@@ -42,6 +40,3 @@ pub fn semaphore_test() -> ! {
     println!("Called down on semaphore again!");
     machine::exit(machine::EXIT_QEMU_SUCCESS);
 }
-
-
-
