@@ -3,6 +3,7 @@ use crate::machine;
 use crate::println;
 use core::sync::atomic::Ordering;
 use core::{ops::Range, sync::atomic::AtomicPtr};
+use x86_64::instructions::port::{self, Port};
 
 pub struct Apic {
     apic_base: usize,
@@ -12,6 +13,10 @@ impl Apic {
     const LAPIC_BASE_DEFAULT: usize = 0xFEE00000;
     const APIC_BASE_MSR: usize = 0x1B;
     const APIC_ENABLE: u32 = 1 << 11;
+    const PIC1_DATA: u16 = 0x21;
+    const PIC2_DATA: u16 = 0xa1;
+    const INIT_IPI_MSG: u32 = 0x4500;
+    const STARTUP_IPI_MSG: u32 = 0x4600;
 
     /// Creates a new LAPIC at the default LAPIC address
     pub fn new() -> Self {
@@ -26,9 +31,19 @@ impl Apic {
         }
     }
 
+    /// Initializes the LAPIC by doing the following
+    /// 1. Registering the Spurious Interrupt Vector with the LAPIC. By convention, this is 0xFF.
+    /// 1. Disabling the PIC by masking IRQs
+    /// 1. Enabling the LAPIC by writing to the appropriate MSR
+    ///
+    /// WARNING: Ensure that the PIC's IRQs have been remapped to >= 32.
+    /// While the PIC's interrupts have been masked, spurious interrupts can still occur.
+    /// If a spurious interrupt occurs while the IRQs have not been remapped, the IRQ will conflict
+    /// with the hardware exception vectors.
     pub fn initialize(&self) {
         unsafe {
-            self.write_register(ApicRegisterWritable::Spurious, 0x1FF);
+            self.write_register(ApicRegisterWritable::Spurious, 0x1FF)
+                .unwrap();
         }
         Apic::disable_8259_pic();
         self.enable_apic();
@@ -36,14 +51,19 @@ impl Apic {
 
     fn disable_8259_pic() {
         unsafe {
-            machine::outb(0xa1, 0xff);
-            machine::outb(0x21, 0xff);
+            let mut pic1_data_port: Port<u8> = Port::new(Apic::PIC1_DATA);
+            let mut pic2_data_port: Port<u8> = Port::new(Apic::PIC2_DATA);
+            pic1_data_port.write(0xff);
+            pic2_data_port.write(0xff);
         }
     }
 
     fn enable_apic(&self) {
         unsafe {
-            machine::wrmsr((self.apic_base as u64) | (Apic::APIC_ENABLE as u64), Apic::APIC_BASE_MSR as u32);
+            machine::wrmsr(
+                (self.apic_base as u64) | (Apic::APIC_ENABLE as u64),
+                Apic::APIC_BASE_MSR as u32,
+            );
         }
     }
 
@@ -53,17 +73,51 @@ impl Apic {
         Ok(unsafe { core::ptr::read_volatile(register_ptr) })
     }
 
-    pub unsafe fn write_register(&self, reg: ApicRegisterWritable, val: u32) -> Result<(), ApicError> {
+    pub unsafe fn write_register(
+        &self,
+        reg: ApicRegisterWritable,
+        val: u32,
+    ) -> Result<(), ApicError> {
         let reg: ApicRegister = reg.into();
         let register_ptr = (self.apic_base + reg.get_offset()?) as *mut u32;
         Ok(core::ptr::write_volatile(register_ptr, val))
     }
+
+    pub fn init_ipi(&self, lapic_id: u32) {
+        unsafe {
+            self.write_register(ApicRegisterWritable::InterruptCommand(1), lapic_id << 24).unwrap();
+            self.write_register(ApicRegisterWritable::InterruptCommand(0), Apic::INIT_IPI_MSG).unwrap();
+        }
+        while (self.read_register(ApicRegisterReadable::InterruptCommand(0)).unwrap() & (1 << 12)) > 0 {}
+    }
+
+    /// Sends a Startup IPI to lapic_id
+    ///
+    /// Arguments:
+    /// reset: A function pointer for the given application processor to begin executing. Must be page aligned,
+    /// and the physical page number must fit in 8 bits.
+    pub fn startup_ipi(&self, lapic_id: u32, reset: unsafe extern "C" fn() -> !) {
+        let reset_eip = reset as *const () as u32;
+        unsafe {
+            self.write_register(ApicRegisterWritable::InterruptCommand(1), lapic_id << 24).unwrap();
+            self.write_register(ApicRegisterWritable::InterruptCommand(0), Apic::STARTUP_IPI_MSG | (reset_eip >> 12)).unwrap();
+        }
+        while (self.read_register(ApicRegisterReadable::InterruptCommand(0)).unwrap() & (1 << 12)) > 0 {}
+    }
+
+    pub fn id(&self) -> usize {
+        (self.read_register(ApicRegisterReadable::Id).unwrap() >> 24) as usize
+    }
+
+    
 }
 
+#[derive(Debug)]
 pub enum ApicError {
     RegisterOutOfRange,
 }
 
+// All registers present in the LAPIC
 enum ApicRegister {
     Id,
     Version,
@@ -211,6 +265,7 @@ impl From<ApicRegisterWritable> for ApicRegister {
     }
 }
 
+/// A LAPIC Register that can be read
 pub enum ApicRegisterReadable {
     Id,
     Version,
@@ -238,6 +293,7 @@ pub enum ApicRegisterReadable {
     ApitDivide,
 }
 
+/// A LAPIC Register that can be written to
 pub enum ApicRegisterWritable {
     Id,
     TaskPriority,
@@ -258,6 +314,7 @@ pub enum ApicRegisterWritable {
 }
 
 pub static mut LAPIC: Option<SMP> = None;
+pub static mut APIC: Option<Apic> = None;
 
 pub struct SMP {
     id: *mut u32,
@@ -295,46 +352,12 @@ pub fn init_bsp() {
     unsafe {
         LAPIC = Some(SMP::new(CONFIG.local_apic));
     }
-    init_ap();
 }
 
-pub fn init_ap() {
-    unsafe {
-        if let Some(ref lapic) = LAPIC {
-            let x = &mut 0x1ff;
-            core::ptr::write_volatile(0xfee000f0 as *mut u32, 0x1ff);
-        }
-        // Disable PIC
-        machine::outb(0xa1, 0xff);
-        machine::outb(0x21, 0xff);
-
-        // Enable LAPIC
-        let msr_val = machine::rdmsr(SMP::MSR);
-        let to_write = msr_val | (SMP::ENABLE as u64);
-
-        machine::wrmsr(msr_val | (SMP::ENABLE as u64), SMP::MSR);
-    }
-}
 
 pub fn me() -> usize {
     unsafe {
         let result = core::ptr::read_volatile(0xfee00020 as *const u32);
         (result >> 24) as usize
-    }
-}
-
-pub fn ipi(id: u32, mut num: u32) {
-    let lapic = unsafe {
-        match LAPIC {
-            Some(ref x) => x,
-            None => panic!("No LAPIC, unable to send IPI"),
-        }
-    };
-    unsafe {
-        let mut id_shifted = id << 24;
-
-        core::ptr::write_volatile(0xfee00310 as *mut u32, id_shifted);
-
-        core::ptr::write_volatile(0xfee00300 as *mut u32, num);
     }
 }

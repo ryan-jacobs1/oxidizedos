@@ -19,7 +19,7 @@ extern "C" {
     pub fn spurious_handler();
     pub fn _apit_handler();
     pub fn software_int();
-    pub fn ap_entry();
+    pub fn ap_entry() -> !;
     pub fn context_switch(current: *mut TCBInfo, next: *mut TCBInfo);
     pub fn cli();
     pub fn sti();

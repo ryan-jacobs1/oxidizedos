@@ -116,7 +116,9 @@ pub extern "C" fn _ap_start() -> ! {
     }
     vmm::init_ap();
     idt::init_ap();
-    smp::init_ap();
+    let apic = smp::Apic::with_base(unsafe {CONFIG.local_apic as usize});
+    apic.initialize();
+    // smp::init_ap();
     timer::init();
     let me = smp::me();
     println!("AP {} reached _ap_start", me);
@@ -128,6 +130,7 @@ pub extern "C" fn _ap_start() -> ! {
         thread::stop();
         //panic!("thread::stop returned");
     }
+    let mut x = 10;
 }
 
 #[no_mangle]
@@ -165,6 +168,8 @@ pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) {
     idt::init();
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
+    let apic = smp::Apic::with_base(unsafe {CONFIG.local_apic as usize});
+    apic.initialize();
     println!("smp::me(): {}", smp::me());
     pci::check_all_buses();
     unsafe {
@@ -184,8 +189,8 @@ pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) {
         // First allocate a kernel stack
         // TODO: Put info about bootstrap stacks in a Bootstrap TCB
         APSTACK.store(vmm::alloc() as usize, Ordering::SeqCst);
-        smp::ipi(i, 0x4500);
-        smp::ipi(i, 0x4600 | (reset_eip >> 12));
+        apic.init_ipi(i);
+        apic.startup_ipi(i, machine::ap_entry);
         while (CORES_ACTIVE.load(Ordering::SeqCst) <= i) {}
     }
     println!("done with ipis");
