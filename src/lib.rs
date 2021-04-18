@@ -27,6 +27,7 @@ pub mod timer;
 pub mod u8250;
 pub mod vga_buffer;
 pub mod vmm;
+pub mod apic;
 
 #[macro_use]
 extern crate bitfield;
@@ -116,7 +117,7 @@ pub extern "C" fn _ap_start() -> ! {
     }
     vmm::init_ap();
     idt::init_ap();
-    let apic = smp::Apic::with_base(unsafe {CONFIG.local_apic as usize});
+    let apic = apic::Apic::with_base(unsafe {CONFIG.local_apic as usize});
     apic.initialize();
     // smp::init_ap();
     timer::init();
@@ -168,7 +169,7 @@ pub extern "C" fn kernel_init(mb_config: &mb_info, end: u64) {
     idt::init();
     idt::interrupt(0xff, machine::spurious_handler);
     smp::init_bsp();
-    let apic = smp::Apic::with_base(unsafe {CONFIG.local_apic as usize});
+    let apic = apic::Apic::with_base(unsafe {CONFIG.local_apic as usize});
     apic.initialize();
     println!("smp::me(): {}", smp::me());
     pci::check_all_buses();
