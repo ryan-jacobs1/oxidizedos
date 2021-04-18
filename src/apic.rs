@@ -3,6 +3,7 @@ use core::ops::Range;
 use x86_64::instructions::port::Port;
 
 use crate::machine;
+use crate::println;
 
 pub struct Apic {
     apic_base: usize,
@@ -16,6 +17,7 @@ impl Apic {
     const PIC2_DATA: u16 = 0xa1;
     const INIT_IPI_MSG: u32 = 0x4500;
     const STARTUP_IPI_MSG: u32 = 0x4600;
+    const PIT_FREQ: u32 = 1193182;
 
     /// Creates a new LAPIC at the default LAPIC address
     pub fn new() -> Self {
@@ -48,6 +50,7 @@ impl Apic {
         self.enable_apic();
     }
 
+    // Disable the PIC by masking IRQs
     fn disable_8259_pic() {
         unsafe {
             let mut pic1_data_port: Port<u8> = Port::new(Apic::PIC1_DATA);
@@ -57,6 +60,7 @@ impl Apic {
         }
     }
 
+    // Enable the APIC by writing to the appropriate MSR
     fn enable_apic(&self) {
         unsafe {
             machine::wrmsr(
@@ -66,12 +70,15 @@ impl Apic {
         }
     }
 
+    /// Read a register from the APIC
     pub fn read_register(&self, reg: ApicRegisterReadable) -> Result<u32, ApicError> {
         let reg: ApicRegister = reg.into();
         let register_ptr = (self.apic_base + reg.get_offset()?) as *const u32;
         Ok(unsafe { core::ptr::read_volatile(register_ptr) })
     }
 
+    /// Write to a register in the APIC.
+    /// Unsafe because writing certain values to certain registers can fault.
     pub unsafe fn write_register(
         &self,
         reg: ApicRegisterWritable,
@@ -84,10 +91,20 @@ impl Apic {
 
     pub fn init_ipi(&self, lapic_id: u32) {
         unsafe {
-            self.write_register(ApicRegisterWritable::InterruptCommand(1), lapic_id << 24).unwrap();
-            self.write_register(ApicRegisterWritable::InterruptCommand(0), Apic::INIT_IPI_MSG).unwrap();
+            self.write_register(ApicRegisterWritable::InterruptCommand(1), lapic_id << 24)
+                .unwrap();
+            self.write_register(
+                ApicRegisterWritable::InterruptCommand(0),
+                Apic::INIT_IPI_MSG,
+            )
+            .unwrap();
         }
-        while (self.read_register(ApicRegisterReadable::InterruptCommand(0)).unwrap() & (1 << 12)) > 0 {}
+        while (self
+            .read_register(ApicRegisterReadable::InterruptCommand(0))
+            .unwrap()
+            & (1 << 12))
+            > 0
+        {}
     }
 
     /// Sends a Startup IPI to lapic_id
@@ -98,17 +115,65 @@ impl Apic {
     pub fn startup_ipi(&self, lapic_id: u32, reset: unsafe extern "C" fn() -> !) {
         let reset_eip = reset as *const () as u32;
         unsafe {
-            self.write_register(ApicRegisterWritable::InterruptCommand(1), lapic_id << 24).unwrap();
-            self.write_register(ApicRegisterWritable::InterruptCommand(0), Apic::STARTUP_IPI_MSG | (reset_eip >> 12)).unwrap();
+            self.write_register(ApicRegisterWritable::InterruptCommand(1), lapic_id << 24)
+                .unwrap();
+            self.write_register(
+                ApicRegisterWritable::InterruptCommand(0),
+                Apic::STARTUP_IPI_MSG | (reset_eip >> 12),
+            )
+            .unwrap();
         }
-        while (self.read_register(ApicRegisterReadable::InterruptCommand(0)).unwrap() & (1 << 12)) > 0 {}
+        while (self
+            .read_register(ApicRegisterReadable::InterruptCommand(0))
+            .unwrap()
+            & (1 << 12))
+            > 0
+        {}
     }
 
+    /// Retrieves the ID of the core's LAPIC.
+    /// The ID is a unique, per-core identifer of the LAPIC
     pub fn id(&self) -> usize {
         (self.read_register(ApicRegisterReadable::Id).unwrap() >> 24) as usize
     }
 
+    pub fn calibrate(&self, hz: u32) -> u32 {
+        let d = (Apic::PIT_FREQ / 20) as u8;
+        let initial = 0xffffffff;
+        let mut port_0: Port<u8> = Port::new(0x61);
+        let mut port_1: Port<u8> = Port::new(0x43);
+        let mut port_2: Port<u8> = Port::new(0x42);
+        unsafe {
+            self.write_register(ApicRegisterWritable::ApitLvtTimer, 0x00010000).unwrap();
+            self.write_register(ApicRegisterWritable::ApitDivide, 0x00010000).unwrap();
+            self.write_register(ApicRegisterWritable::ApitInitialCount, initial).unwrap();
+            port_0.write(1);
+            port_1.write(0b10110110);
+            port_2.write(d);
+            port_2.write(d >> 8);
+        }
+        let mut last = unsafe { port_0.read() & 0x20 };
+        let mut changes = 0;
 
+        while changes < 40 {
+            let t = unsafe { port_0.read() & 0x20 };
+            if t != last {
+                changes += 1;
+                last = t;
+            }
+        }
+        let current_count = self.read_register(ApicRegisterReadable::ApitCurrentCount).unwrap();
+        println!("current count {:x}", current_count);
+        let diff = initial - current_count;
+        unsafe {
+            port_0.write(0);
+        }
+        println!("diff {:x}", diff);
+        println!("APIT running at {} hz", diff);
+        let counter = diff / hz;
+        println!("apit counter: {}", counter);
+        counter
+    }
 }
 
 #[derive(Debug)]
